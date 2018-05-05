@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -57,6 +58,11 @@ func init() {
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.StringVar(&translationFile, "T", "en_US.all.json", "Translation")
 	flag.Parse()
+
+	if token == "" {
+		log.Fatal("No token")
+		os.Exit(1)
+	}
 
 	translationName := strings.Split(path.Base(translationFile), ".")[0]
 
