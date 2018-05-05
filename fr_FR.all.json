@@ -1,0 +1,78 @@
+[
+  {
+    "id": "bot_ready",
+    "translation": "Le GiveAwayBot est pret! Tapez !gab"
+  },
+  {
+    "id": "usage",
+    "translation": "Usage:\nLorsque qu'un giveaway est lancé, ecrivez \"!gabroll\" pour participer et connaitre le résultat de votre dé. Un seul lancer par personne!\nÀ la fin du giveaway, le gagnant sera annoncé et sa clé lui sera envoyée par message privé"
+  },
+  {
+    "id": "start_usage",
+    "translation": "Usage:\n!gabstart <nom du jeu> <clé du jeu>"
+  },
+  {
+    "id": "debug_usage",
+    "translation": "Usage:\n!gabdebug [mention|dm]"
+  },
+  {
+    "id": "shout_gab",
+    "translation": "GAAAAAAAAAAAAAAAB!"
+  },
+  {
+    "id": "giveaway_active",
+    "translation": "Le giveaway a déjà commencé! Le jeu à gagner est {{.Game}}!"
+  },
+  {
+    "id": "giveaway_inactive",
+    "translation": "Le giveaway est terminé. Rendez-vous la prochaine fois!"
+  },
+  {
+    "id": "gab_talk",
+    "translation": "{{.Author}} sur {{.Server}} dit : {{.Message}}"
+  },
+  {
+    "id": "nowhere",
+    "translation": "messagerie privée"
+  },
+  {
+    "id": "start_announcement",
+    "translation": "Le giveaway commence! Le jeu à gagner est {{.Game}}"
+  },
+  {
+    "id": "roll_result",
+    "translation": "{{.Person}} a obtenu un {{.Count}}!"
+  },
+  {
+    "id": "already_rolled",
+    "translation": "Tu a déjà obtenu un {{.Count}}."
+  },
+  {
+    "id": "no_players",
+    "translation": "Personne n'a joué le jeu :sob:"
+  },
+  {
+    "id": "winner_announcement_start",
+    "translation": "Et le nom du gagnant eeeeeeeeeest ..."
+  },
+  {
+    "id": "winner_announcement",
+    "translation": "{{.Person}}!!!!"
+  },
+  {
+    "id": "winner_announcement_cena",
+    "translation": "John Cena!!!! :trumpet::notes::notes::trumpet::notes::notes:"
+  },
+  {
+    "id": "winner_announcement_final",
+    "translation": "En fait, {{.Person}} est le gagnant, bien joué."
+  },
+  {
+    "id": "winner_dm",
+    "translation": "Quelle chance {{.Person}}! Voilà ta clé: \n{{.Key}}"
+  },
+  {
+    "id": "mention_person",
+    "translation": "{{.Person}}"
+  }
+]
