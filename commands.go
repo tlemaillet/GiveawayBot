@@ -26,7 +26,7 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		message += gabPrefix + command.name + "\n" +
 			"\t" + command.description + "\n"
 
-		if command.options != string(nil) {
+		if command.options != "" {
 			message += "\tOptions : " + gabPrefix + command.name + " " + command.options
 		}
 

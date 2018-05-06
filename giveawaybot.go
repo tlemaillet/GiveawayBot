@@ -127,7 +127,7 @@ func init() {
 	}
 	commands["stop"] = &GabCommand{
 		"stop",
-		nil,
+		"",
 		T("stop_command_desc"),
 		true,
 		false,
@@ -171,7 +171,7 @@ func init() {
 	}
 	commands["status"] = &GabCommand{
 		"status",
-		nil,
+		"",
 		T("status_command_desc"),
 		false,
 		false,
@@ -184,7 +184,7 @@ func init() {
 	}
 	commands["listcommands"] = &GabCommand{
 		"listcommands",
-		nil,
+		"",
 		T("listcommands_command_desc"),
 		false,
 		false,
@@ -202,7 +202,7 @@ func init() {
 	}
 	commands["help"] = &GabCommand{
 		"help",
-		nil,
+		"",
 		T("help_command_desc"),
 		false,
 		false,
@@ -215,7 +215,7 @@ func init() {
 	}
 	commands["notify"] = &GabCommand{
 		"notify",
-		nil,
+		"",
 		T("notify_command_desc"),
 		false,
 		true,
@@ -224,7 +224,7 @@ func init() {
 	}
 	commands["unnotify"] = &GabCommand{
 		"unnotify",
-		nil,
+		"",
 		T("unnotify_command_desc"),
 		false,
 		true,
@@ -233,7 +233,7 @@ func init() {
 	}
 	commands["listnotes"] = &GabCommand{
 		"listnotes",
-		nil,
+		"",
 		T("listnotes_command_desc"),
 		true,
 		false,
