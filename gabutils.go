@@ -134,3 +134,40 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 		s.ChannelMessageSend(channel.ID, message)
 	}
 }
+
+func hasReachedNeedLimit(user *discordgo.User) bool {
+	if needLimit > 0 {
+		// TODO check the limit status for said user
+	}
+	return true
+}
+
+func addNeedTry(user *discordgo.User) (err error) {
+
+	return nil
+}
+
+func getWinnerFromParticipants(participants GabParticipants) (winner GabParticipant, err error) {
+	needed := false
+	bestScore := -1
+
+	for _, participant := range participants {
+		if needed && !participant.need {
+			continue
+		}
+
+		if !needed && participant.need {
+			bestScore = participant.score
+			winner = participant
+			needed = true
+			continue
+		}
+
+		if participant.score > bestScore {
+			winner = participant
+			bestScore = participant.score
+		}
+	}
+
+	return winner, nil
+}

@@ -23,15 +23,20 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 			continue
 		}
 
-		message += defaultPrefix + command.name + "\n" +
+		message += prefix + command.name + "\n" +
 			"\t" + command.description + "\n"
+
+		if command.options != string(nil) {
+			message += "\tAliases : " + prefix
+		}
+
 		if aliases, ok := aliasTable[command.name]; ok {
 			message += "\tAliases : "
 			for i, alias := range aliases {
 				if i != 0 {
 					message += ", "
 				}
-				message += defaultPrefix + alias
+				message += prefix + alias
 			}
 			message += "\n"
 		}
@@ -80,7 +85,7 @@ func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	} else {
 		game = startArgs[0]
 		gameKey = startArgs[1]
-		participants = map[string]int{}
+		gabParticipants = map[string]GabParticipant{}
 		rolling = true
 		sendToAllGuilds(s,
 			T("start_announcement",
@@ -102,18 +107,9 @@ func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 	rolling = false
-	if len(participants) != 0 {
-		var winK string
-		winV := -1
-
-		for k, v := range participants {
-			if v > winV {
-				winK = k
-				winV = v
-			}
-		}
-
-		winner, _ := s.User(winK)
+	if len(gabParticipants) != 0 {
+		winnerParticipant, _ := getWinnerFromParticipants(gabParticipants)
+		winner := winnerParticipant.User
 
 		sendToAllGuilds(s, T("winner_announcement_start"))
 		time.Sleep(time.Second * 4)
@@ -144,7 +140,6 @@ func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
-
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
 	if err != nil {
@@ -152,31 +147,62 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	prefix := strings.Split(m.Content, " ")[0]
+	if !rolling {
+		s.ChannelMessageSend(c.ID, T("giveaway_inactive"))
+		return
+	}
 
-	if rolling {
-		if roll, exist := participants[m.Author.ID]; exist {
-			s.ChannelMessageSend(c.ID,
-				T("already_rolled",
-					TInter{"Person": m.Author.Username, "Count": roll}))
-		} else {
-			roll := rndm.Intn(100)
-			participants[m.Author.ID] = roll
+	message := strings.Split(m.Content, " ")
+	prefixCommand := message[0]
 
-			switch prefix {
-			case "!gabroll", "!gabr":
-				sendToAllGuilds(s,
-					T("roll_result",
-						TInter{"Person": m.Author.Username, "Count": roll}))
-			case "!gablocalroll", "!gablr":
-				s.ChannelMessageSend(c.ID,
-					T("roll_result",
-						TInter{"Person": m.Author.Username, "Count": roll}))
+	var need bool
+
+	if len(message) > 0 {
+		switch message[1] {
+		case "greed":
+			need = false
+		case "need":
+			need = true
+		default:
+			need = false
+		}
+	}
+
+	commandName := strings.Replace(prefixCommand, prefix, "", 1)
+
+	if roll, exist := gabParticipants[m.Author.ID]; exist {
+		s.ChannelMessageSend(c.ID,
+			T("already_rolled",
+				TInter{"Person": m.Author.Username, "Count": roll}))
+	} else if need && hasReachedNeedLimit(m.Author) {
+		s.ChannelMessageSend(c.ID, T("reached_need_limit"))
+	} else {
+		roll := rndm.Intn(100)
+
+		if need {
+			err := addNeedTry(m.Author)
+			if err != nil {
+				fmt.Println(err)
+				return
 			}
 		}
-	} else {
-		s.ChannelMessageSend(c.ID,
-			T("giveaway_inactive"))
+
+		gabParticipants[m.Author.ID] = GabParticipant{
+			m.Author,
+			roll,
+			need,
+		}
+
+		switch commandName {
+		case "roll", "r":
+			sendToAllGuilds(s,
+				T("roll_result",
+					TInter{"Person": m.Author.Username, "Count": roll}))
+		case "localroll", "lr":
+			s.ChannelMessageSend(c.ID,
+				T("roll_result",
+					TInter{"Person": m.Author.Username, "Count": roll}))
+		}
 	}
 }
 
