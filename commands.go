@@ -23,11 +23,11 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 			continue
 		}
 
-		message += prefix + command.name + "\n" +
+		message += gabPrefix + command.name + "\n" +
 			"\t" + command.description + "\n"
 
 		if command.options != string(nil) {
-			message += "\tAliases : " + prefix
+			message += "\tOptions : " + gabPrefix + command.name + " " + command.options
 		}
 
 		if aliases, ok := aliasTable[command.name]; ok {
@@ -36,7 +36,7 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 				if i != 0 {
 					message += ", "
 				}
-				message += prefix + alias
+				message += gabPrefix + alias
 			}
 			message += "\n"
 		}
@@ -168,7 +168,7 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 	}
 
-	commandName := strings.Replace(prefixCommand, prefix, "", 1)
+	commandName := strings.Replace(prefixCommand, gabPrefix, "", 1)
 
 	if roll, exist := gabParticipants[m.Author.ID]; exist {
 		s.ChannelMessageSend(c.ID,

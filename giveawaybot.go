@@ -73,7 +73,7 @@ var guildsState map[string]GabGuildState
 
 var token string
 
-var prefix string
+var gabPrefix string
 
 var commands GabCommands
 var aliases GabAliases
@@ -111,7 +111,7 @@ func init() {
 	_ = globalState // TODO Il faudra l'initialiser ici
 	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
 
-	prefix = defaultPrefix
+	gabPrefix = defaultPrefix
 
 	commands = make(map[string]*GabCommand)
 	aliases = make(map[string]GabAlias)
@@ -322,8 +322,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	// check if the message starts with defined prefix
-	if !strings.HasPrefix(m.Content, prefix) {
+	// check if the message starts with defined gabPrefix
+	if !strings.HasPrefix(m.Content, gabPrefix) {
 		return
 	}
 
@@ -336,7 +336,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	prefixCommand := strings.Split(m.Content, " ")[0]
 	fmt.Printf("%s : %s\n", m.Author.Username, prefixCommand)
-	commandName := strings.Replace(prefixCommand, prefix, "", 1)
+	commandName := strings.Replace(prefixCommand, gabPrefix, "", 1)
 
 	var command *GabCommand = nil
 
