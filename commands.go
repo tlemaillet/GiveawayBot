@@ -27,11 +27,11 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 			"\t" + command.description + "\n"
 
 		if command.options != "" {
-			message += "\tOptions : " + gabPrefix + command.name + " " + command.options
+			message += "\t" + T("options", 2) + " : " + gabPrefix + command.name + " " + command.options + "\n"
 		}
 
 		if aliases, ok := aliasTable[command.name]; ok {
-			message += "\tAliases : "
+			message += "\t" + T("alias", 2) + " : "
 			for i, alias := range aliases {
 				if i != 0 {
 					message += ", "
