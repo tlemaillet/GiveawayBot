@@ -23,6 +23,7 @@ type TInter map[string]interface{}
 
 type GabCommand struct {
 	name        string
+	options		string
 	description string
 	needsAdmin  bool
 	needsServer bool
@@ -37,20 +38,54 @@ type GabAlias struct {
 }
 type GabAliases map[string]GabAlias
 
+type GabParticipant struct {
+	User    *discordgo.User
+	score	int
+	need 	bool
+}
+type GabParticipants map[string]GabParticipant
+
+type GabState struct {
+	gabPrefix string
+
+	commands GabCommands
+	aliases GabAliases
+	aliasTable map[string][]string
+
+	game string
+	gameKey string
+
+	rolling bool
+	gabParticipants GabParticipants
+	needLimit int
+}
+type GabGuildState struct {
+	state GabState
+	guild *discordgo.Guild
+}
+
+
+const defaultPrefix = "!gab"
+const defaultNeedLimit = 2
+
+var globalState GabState
+var guildsState map[string]GabGuildState
+
+var token string
+
+var prefix string
+
 var commands GabCommands
 var aliases GabAliases
 var aliasTable map[string][]string
 
-var token string
-
-const defaultPrefix = "!gab"
-
-var prefix string
-
-var participants map[string]int
-var rolling bool
 var game string
 var gameKey string
+
+var rolling bool
+var gabParticipants GabParticipants
+var needLimit int
+
 
 func init() {
 	var translationFile string
@@ -73,6 +108,8 @@ func init() {
 		fmt.Errorf("error creating translation function:\n %s\n", err)
 		return
 	}
+	_ = globalState // TODO Il faudra l'initialiser ici
+	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
 
 	prefix = defaultPrefix
 
@@ -81,6 +118,7 @@ func init() {
 
 	commands["start"] = &GabCommand{
 		"start",
+		"[game name] [key]",
 		T("start_command_desc"),
 		true,
 		false,
@@ -89,6 +127,7 @@ func init() {
 	}
 	commands["stop"] = &GabCommand{
 		"stop",
+		nil,
 		T("stop_command_desc"),
 		true,
 		false,
@@ -97,6 +136,7 @@ func init() {
 	}
 	commands["debug"] = &GabCommand{
 		"debug",
+		"[dm|mention]",
 		T("debug_command_desc"),
 		true,
 		false,
@@ -105,6 +145,7 @@ func init() {
 	}
 	commands["roll"] = &GabCommand{
 		"roll",
+		"[greed|need]",
 		T("roll_command_desc"),
 		false,
 		false,
@@ -117,6 +158,7 @@ func init() {
 	}
 	commands["localroll"] = &GabCommand{
 		"localroll",
+		"[greed|need]",
 		T("localroll_command_desc"),
 		false,
 		false,
@@ -129,6 +171,7 @@ func init() {
 	}
 	commands["status"] = &GabCommand{
 		"status",
+		nil,
 		T("status_command_desc"),
 		false,
 		false,
@@ -141,6 +184,7 @@ func init() {
 	}
 	commands["listcommands"] = &GabCommand{
 		"listcommands",
+		nil,
 		T("listcommands_command_desc"),
 		false,
 		false,
@@ -149,6 +193,7 @@ func init() {
 	}
 	commands["talk"] = &GabCommand{
 		"talk",
+		"message",
 		T("talk_command_desc"),
 		false,
 		false,
@@ -157,6 +202,7 @@ func init() {
 	}
 	commands["help"] = &GabCommand{
 		"help",
+		nil,
 		T("help_command_desc"),
 		false,
 		false,
@@ -169,6 +215,7 @@ func init() {
 	}
 	commands["notify"] = &GabCommand{
 		"notify",
+		nil,
 		T("notify_command_desc"),
 		false,
 		true,
@@ -177,6 +224,7 @@ func init() {
 	}
 	commands["unnotify"] = &GabCommand{
 		"unnotify",
+		nil,
 		T("unnotify_command_desc"),
 		false,
 		true,
@@ -185,6 +233,7 @@ func init() {
 	}
 	commands["listnotes"] = &GabCommand{
 		"listnotes",
+		nil,
 		T("listnotes_command_desc"),
 		true,
 		false,
@@ -193,6 +242,8 @@ func init() {
 	}
 
 	aliasTable = makeAliasTable(aliases)
+
+	needLimit = defaultNeedLimit
 }
 
 func makeAliasTable(aliases GabAliases) (aliasTable map[string][]string) {
