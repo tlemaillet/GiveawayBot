@@ -64,12 +64,15 @@ type GabGuildState struct {
 	guild *discordgo.Guild
 }
 
+type GabNeedState map[string][]time.Time
+
 
 const defaultPrefix = "!gab"
 const defaultNeedLimit = 2
 
 var globalState GabState
 var guildsState map[string]GabGuildState
+var needState GabNeedState
 
 var token string
 
@@ -110,6 +113,8 @@ func init() {
 	}
 	_ = globalState // TODO Il faudra l'initialiser ici
 	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
+
+	needState = make(map[string][]time.Time)
 
 	gabPrefix = defaultPrefix
 

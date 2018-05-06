@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -131,19 +132,33 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 	for _, channel := range channels {
 		guild, _ := s.Guild(channel.GuildID)
 		fmt.Printf("to %s : %s\n", guild.Name, channel.Name)
-		s.ChannelMessageSend(channel.ID, message)
+		// s.ChannelMessageSend(channel.ID, message)
 	}
 }
 
 func hasReachedNeedLimit(user *discordgo.User) bool {
-	if needLimit > 0 {
-		// TODO check the limit status for said user
+	if userNeed, exist:= needState[user.ID]; exist {
+		if len(userNeed) <= needLimit {
+			return false
+		} else {
+			count := 0
+			for _, needTime := range userNeed {
+				if needTime.After(time.Now().AddDate(0, -1, 0)) {
+					count++
+				}
+			}
+			if count <= needLimit {
+				return false
+			}
+		}
+	} else {
+		return false
 	}
 	return true
 }
 
 func addNeedTry(user *discordgo.User) (err error) {
-
+	needState[user.ID] = append(needState[user.ID], time.Now())
 	return nil
 }
 
