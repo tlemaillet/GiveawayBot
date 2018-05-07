@@ -144,7 +144,7 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 	for _, channel := range channels {
 		guild, _ := s.Guild(channel.GuildID)
 		fmt.Printf("to %s : %s\n", guild.Name, channel.Name)
-		// s.ChannelMessageSend(channel.ID, message)
+		s.ChannelMessageSend(channel.ID, message)
 	}
 }
 
