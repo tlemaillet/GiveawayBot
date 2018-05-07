@@ -113,6 +113,7 @@ func init() {
 	}
 	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
 
+	// TODO add persistance
 	needState = make(map[string][]time.Time)
 
 	globalState.commands = getDefaultGabCommandsAndAliases()

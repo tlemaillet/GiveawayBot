@@ -168,6 +168,7 @@ func hasReachedNeedLimit(user *discordgo.User) bool {
 
 func addNeedTry(user *discordgo.User) (err error) {
 	needState[user.ID] = append(needState[user.ID], time.Now())
+	// TODO add persistance
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 )
 
 func getDefaultGabCommandsAndAliases() (commands GabCommands) {
+	commands = make(GabCommands)
 	commands["start"] = &GabCommand{
 		"start",
 		"[game name] [key]",
