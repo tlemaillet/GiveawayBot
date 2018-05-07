@@ -64,7 +64,11 @@ type GabGuildState struct {
 	guild *discordgo.Guild
 }
 
-type GabNeedState map[string][]time.Time
+type GabNeedEntry struct {
+	game   string
+	date   time.Time
+}
+type GabNeedState map[string][]*GabNeedEntry
 
 const defaultPrefix = "!gab"
 const defaultNeedLimit = 2
@@ -94,14 +98,14 @@ func init() {
 	T, err = i18n.Tfunc(translationName)
 	if err != nil {
 		fmt.Errorf("error creating translation function:\n %s\n", err)
-		return
+		os.Exit(1)
 	}
 
 	globalState = GabState{
 		gabPrefix: defaultPrefix,
 
-		commands:   make(map[string]*GabCommand),
-		aliases:    make(map[string]GabAlias),
+		commands:   make(GabCommands),
+		aliases:    make(GabAliases),
 		aliasTable: nil,
 
 		game:    "",
@@ -114,7 +118,7 @@ func init() {
 	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
 
 	// TODO add persistance
-	needState = make(map[string][]time.Time)
+	needState = make(GabNeedState)
 
 	globalState.commands = getDefaultGabCommandsAndAliases()
 
