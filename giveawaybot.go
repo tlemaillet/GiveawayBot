@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/gob"
 	"flag"
 	"fmt"
 	"log"
@@ -65,10 +66,10 @@ type GabGuildState struct {
 }
 
 type GabNeedEntry struct {
-	game   string
-	date   time.Time
+	Game string
+	Date time.Time
 }
-type GabNeedState map[string][]*GabNeedEntry
+type GabNeedState map[string][]GabNeedEntry
 
 const defaultPrefix = "!gab"
 const defaultNeedLimit = 2
@@ -76,6 +77,7 @@ const defaultNeedLimit = 2
 var globalState GabState
 var guildsState map[string]GabGuildState
 var needState GabNeedState
+var needDataFile string
 
 var token string
 
@@ -84,6 +86,7 @@ func init() {
 
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.StringVar(&translationFile, "T", "en_US.all.json", "Translation")
+	flag.StringVar(&needDataFile, "d", "./needData.gob", "Need data file")
 	flag.Parse()
 
 	if token == "" {
@@ -117,8 +120,24 @@ func init() {
 	}
 	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
 
-	// TODO add persistance
-	needState = make(GabNeedState)
+
+	// Try to recover need data from file
+	reader, err := os.OpenFile(needDataFile, os.O_RDONLY|os.O_CREATE, 0600)
+	if err != nil {
+		log.Fatal("data file opening error", err)
+		os.Exit(1)
+	} else {
+		dec := gob.NewDecoder(reader)
+
+		err = dec.Decode(&needState)
+		if err != nil {
+			fmt.Println("decode error:", err)
+			needState = make(GabNeedState)
+		}
+	}
+	reader.Close()
+
+
 
 	globalState.commands = getDefaultGabCommandsAndAliases()
 
@@ -144,11 +163,13 @@ func main() {
 	// Open the websocket and begin listening.
 	err = dg.Open()
 	// Cleanly close down the Discord session on return.
+	defer persistNeedData(needState)
 	defer dg.Close()
 	if err != nil {
 		fmt.Println("Error opening Discord session: ", err)
 		return
 	}
+
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("GiveawayBot is now running.  Press CTRL-C to exit.")

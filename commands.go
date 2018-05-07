@@ -287,7 +287,7 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	var need bool
 
-	if len(message) > 0 {
+	if len(message) >= 2 {
 		switch message[1] {
 		case "greed":
 			need = false
@@ -304,7 +304,7 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if participant.need {
 
 			s.ChannelMessageSend(c.ID,
-				T("already_rolled__need",
+				T("already_rolled_need",
 					TInter{"Person": participant.User.Username,
 						"Count": participant.score}))
 		} else {

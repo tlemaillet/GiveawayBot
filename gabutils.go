@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/gob"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -147,16 +150,16 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 
 func hasReachedNeedLimit(user *discordgo.User) bool {
 	if needEntries, exist := needState[user.ID]; exist {
-		if len(needEntries) <= globalState.needLimit {
+		if len(needEntries) < globalState.needLimit {
 			return false
 		} else {
 			count := 0
 			for _, needEntry := range needEntries {
-				if needEntry.date.After(time.Now().AddDate(0, -1, 0)) {
+				if needEntry.Date.After(time.Now().AddDate(0, -1, 0)) {
 					count++
 				}
 			}
-			if count <= globalState.needLimit {
+			if count < globalState.needLimit {
 				return false
 			}
 		}
@@ -168,9 +171,13 @@ func hasReachedNeedLimit(user *discordgo.User) bool {
 
 func addNeedTry(user *discordgo.User) (err error) {
 	needState[user.ID] = append(needState[user.ID],
-		&GabNeedEntry{globalState.game, time.Now()})
+		GabNeedEntry{globalState.game, time.Now()})
 
-	// TODO add persistance
+	err = persistNeedData(needState)
+	if err != nil {
+		needState[user.ID] = needState[user.ID][:len(needState[user.ID])-1]
+		return err
+	}
 	return nil
 }
 
@@ -197,4 +204,17 @@ func getWinnerFromParticipants(participants GabParticipants) (winner GabParticip
 	}
 
 	return winner, nil
+}
+
+func persistNeedData(state GabNeedState) (err error) {
+	reader, err := os.OpenFile(needDataFile, os.O_WRONLY, 0600)
+	if err != nil {
+		log.Fatal("data file write opening error", err)
+		os.Exit(1)
+	}
+	err = gob.NewEncoder(reader).Encode(state)
+	if err != nil {
+		return err
+	}
+	return nil
 }
