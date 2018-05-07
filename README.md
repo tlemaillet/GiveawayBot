@@ -1,5 +1,5 @@
 # GiveawayBot
-A discord bot that give sweet gifts
+A discord bot that gives sweet gifts
 
 
 Build command : `go build src/github.com/tlemaillet/GiveawayBot`
