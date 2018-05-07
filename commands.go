@@ -8,6 +8,135 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+func getDefaultGabCommandsAndAliases() (commands GabCommands) {
+	commands["start"] = &GabCommand{
+		"start",
+		"[game name] [key]",
+		T("start_command_desc"),
+		true,
+		false,
+		false,
+		startGiveawayCommand,
+	}
+	commands["stop"] = &GabCommand{
+		"stop",
+		"",
+		T("stop_command_desc"),
+		true,
+		false,
+		false,
+		stopGiveawayCommand,
+	}
+	commands["debug"] = &GabCommand{
+		"debug",
+		"[dm|mention]",
+		T("debug_command_desc"),
+		true,
+		false,
+		false,
+		debugCommand,
+	}
+	commands["roll"] = &GabCommand{
+		"roll",
+		"[greed|need]",
+		T("roll_command_desc"),
+		false,
+		false,
+		false,
+		rollCommand,
+	}
+	globalState.aliases["r"] = GabAlias{
+		"r",
+		commands["roll"],
+	}
+	commands["localroll"] = &GabCommand{
+		"localroll",
+		"[greed|need]",
+		T("localroll_command_desc"),
+		false,
+		false,
+		false,
+		rollCommand,
+	}
+	globalState.aliases["lr"] = GabAlias{
+		"lr",
+		commands["localroll"],
+	}
+	commands["status"] = &GabCommand{
+		"status",
+		"",
+		T("status_command_desc"),
+		false,
+		false,
+		false,
+		statusCommand,
+	}
+	globalState.aliases["current"] = GabAlias{
+		"current",
+		commands["status"],
+	}
+	commands["listcommands"] = &GabCommand{
+		"listcommands",
+		"",
+		T("listcommands_command_desc"),
+		false,
+		false,
+		false,
+		listCommandsCommand,
+	}
+	commands["talk"] = &GabCommand{
+		"talk",
+		"message",
+		T("talk_command_desc"),
+		false,
+		false,
+		false,
+		talkCommand,
+	}
+	commands["help"] = &GabCommand{
+		"help",
+		"",
+		T("help_command_desc"),
+		false,
+		false,
+		false,
+		helpCommand,
+	}
+	globalState.aliases["info"] = GabAlias{
+		"info",
+		commands["help"],
+	}
+	commands["notify"] = &GabCommand{
+		"notify",
+		"",
+		T("notify_command_desc"),
+		false,
+		true,
+		false,
+		notifyCommand,
+	}
+	commands["unnotify"] = &GabCommand{
+		"unnotify",
+		"",
+		T("unnotify_command_desc"),
+		false,
+		true,
+		false,
+		unnotifyCommand,
+	}
+	commands["listnotes"] = &GabCommand{
+		"listnotes",
+		"",
+		T("listnotes_command_desc"),
+		true,
+		false,
+		true,
+		listNotesCommand,
+	}
+
+	return commands
+}
+
 func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
@@ -18,25 +147,25 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	var message = T("command_list") + "\n"
 
-	for _, command := range commands {
+	for _, command := range globalState.commands {
 		if command.hidden {
 			continue
 		}
 
-		message += gabPrefix + command.name + "\n" +
+		message += globalState.gabPrefix + command.name + "\n" +
 			"\t" + command.description + "\n"
 
 		if command.options != "" {
-			message += "\t" + T("options", 2) + " : " + gabPrefix + command.name + " " + command.options + "\n"
+			message += "\t" + T("options", 2) + " : " + globalState.gabPrefix + command.name + " " + command.options + "\n"
 		}
 
-		if aliases, ok := aliasTable[command.name]; ok {
+		if aliases, ok := globalState.aliasTable[command.name]; ok {
 			message += "\t" + T("alias", 2) + " : "
 			for i, alias := range aliases {
 				if i != 0 {
 					message += ", "
 				}
-				message += gabPrefix + alias
+				message += globalState.gabPrefix + alias
 			}
 			message += "\n"
 		}
@@ -67,8 +196,8 @@ func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if rolling {
-		s.ChannelMessageSend(c.ID, T("giveaway_already_active", TInter{"Game": game}))
+	if globalState.rolling {
+		s.ChannelMessageSend(c.ID, T("giveaway_already_active", TInter{"Game": globalState.game}))
 		return
 	}
 	startArgs, err := parseArguments(startMessage)
@@ -83,13 +212,13 @@ func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if len(startArgs) != 2 {
 		s.ChannelMessageSend(c.ID, T("start_usage"))
 	} else {
-		game = startArgs[0]
-		gameKey = startArgs[1]
-		gabParticipants = map[string]GabParticipant{}
-		rolling = true
+		globalState.game = startArgs[0]
+		globalState.gameKey = startArgs[1]
+		globalState.gabParticipants = map[string]GabParticipant{}
+		globalState.rolling = true
 		sendToAllGuilds(s,
 			T("start_announcement",
-				TInter{"Game": game}))
+				TInter{"Game": globalState.game}))
 	}
 }
 
@@ -102,13 +231,13 @@ func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if !rolling {
+	if !globalState.rolling {
 		s.ChannelMessageSend(c.ID, T("giveaway_already_inactive"))
 		return
 	}
-	rolling = false
-	if len(gabParticipants) != 0 {
-		winnerParticipant, _ := getWinnerFromParticipants(gabParticipants)
+	globalState.rolling = false
+	if len(globalState.gabParticipants) != 0 {
+		winnerParticipant, _ := getWinnerFromParticipants(globalState.gabParticipants)
 		winner := winnerParticipant.User
 
 		sendToAllGuilds(s, T("winner_announcement_start"))
@@ -132,7 +261,7 @@ func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		s.ChannelMessageSend(channel.ID,
 			T("winner_dm",
 				TInter{"Person": winner.Username,
-					"Key": gameKey}))
+					"Key": globalState.gameKey}))
 
 	} else {
 		sendToAllGuilds(s, T("no_players"))
@@ -147,7 +276,7 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if !rolling {
+	if !globalState.rolling {
 		s.ChannelMessageSend(c.ID, T("giveaway_inactive"))
 		return
 	}
@@ -168,12 +297,22 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 	}
 
-	commandName := strings.Replace(prefixCommand, gabPrefix, "", 1)
+	commandName := strings.Replace(prefixCommand, globalState.gabPrefix, "", 1)
 
-	if roll, exist := gabParticipants[m.Author.ID]; exist {
-		s.ChannelMessageSend(c.ID,
-			T("already_rolled",
-				TInter{"Person": m.Author.Username, "Count": roll}))
+	if participant, exist := globalState.gabParticipants[m.Author.ID]; exist {
+		if participant.need {
+
+			s.ChannelMessageSend(c.ID,
+				T("already_rolled__need",
+					TInter{"Person": participant.User.Username,
+						"Count": participant.score}))
+		} else {
+			s.ChannelMessageSend(c.ID,
+				T("already_rolled",
+					TInter{"Person": participant.User.Username,
+						"Count": participant.score}))
+
+		}
 	} else if need && hasReachedNeedLimit(m.Author) {
 		s.ChannelMessageSend(c.ID, T("reached_need_limit"))
 	} else {
@@ -187,7 +326,7 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 		}
 
-		gabParticipants[m.Author.ID] = GabParticipant{
+		globalState.gabParticipants[m.Author.ID] = GabParticipant{
 			m.Author,
 			roll,
 			need,
@@ -215,9 +354,9 @@ func statusCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if rolling {
+	if globalState.rolling {
 		s.ChannelMessageSend(c.ID,
-			T("giveaway_active", TInter{"Game": game}))
+			T("giveaway_active", TInter{"Game": globalState.game}))
 	} else {
 		s.ChannelMessageSend(c.ID,
 			T("giveaway_inactive"))

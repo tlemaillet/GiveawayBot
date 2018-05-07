@@ -8,6 +8,15 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+func makeAliasTable(aliases GabAliases) (aliasTable map[string][]string) {
+	aliasTable = make(map[string][]string)
+	for _, alias := range aliases {
+		aliasTable[alias.command.name] = append(aliasTable[alias.command.name], alias.name)
+	}
+
+	return aliasTable
+}
+
 func isGabsAdmin(u *discordgo.User) bool {
 	if u.ID == "137509464759599104" {
 		return true
@@ -137,8 +146,8 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 }
 
 func hasReachedNeedLimit(user *discordgo.User) bool {
-	if userNeed, exist:= needState[user.ID]; exist {
-		if len(userNeed) <= needLimit {
+	if userNeed, exist := needState[user.ID]; exist {
+		if len(userNeed) <= globalState.needLimit {
 			return false
 		} else {
 			count := 0
@@ -147,7 +156,7 @@ func hasReachedNeedLimit(user *discordgo.User) bool {
 					count++
 				}
 			}
-			if count <= needLimit {
+			if count <= globalState.needLimit {
 				return false
 			}
 		}

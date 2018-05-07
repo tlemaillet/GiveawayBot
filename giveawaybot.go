@@ -23,7 +23,7 @@ type TInter map[string]interface{}
 
 type GabCommand struct {
 	name        string
-	options		string
+	options     string
 	description string
 	needsAdmin  bool
 	needsServer bool
@@ -39,25 +39,25 @@ type GabAlias struct {
 type GabAliases map[string]GabAlias
 
 type GabParticipant struct {
-	User    *discordgo.User
-	score	int
-	need 	bool
+	User  *discordgo.User
+	score int
+	need  bool
 }
 type GabParticipants map[string]GabParticipant
 
 type GabState struct {
 	gabPrefix string
 
-	commands GabCommands
-	aliases GabAliases
+	commands   GabCommands
+	aliases    GabAliases
 	aliasTable map[string][]string
 
-	game string
+	game    string
 	gameKey string
 
-	rolling bool
+	rolling         bool
 	gabParticipants GabParticipants
-	needLimit int
+	needLimit       int
 }
 type GabGuildState struct {
 	state GabState
@@ -65,7 +65,6 @@ type GabGuildState struct {
 }
 
 type GabNeedState map[string][]time.Time
-
 
 const defaultPrefix = "!gab"
 const defaultNeedLimit = 2
@@ -75,20 +74,6 @@ var guildsState map[string]GabGuildState
 var needState GabNeedState
 
 var token string
-
-var gabPrefix string
-
-var commands GabCommands
-var aliases GabAliases
-var aliasTable map[string][]string
-
-var game string
-var gameKey string
-
-var rolling bool
-var gabParticipants GabParticipants
-var needLimit int
-
 
 func init() {
 	var translationFile string
@@ -111,153 +96,28 @@ func init() {
 		fmt.Errorf("error creating translation function:\n %s\n", err)
 		return
 	}
-	_ = globalState // TODO Il faudra l'initialiser ici
+
+	globalState = GabState{
+		gabPrefix: defaultPrefix,
+
+		commands:   make(map[string]*GabCommand),
+		aliases:    make(map[string]GabAlias),
+		aliasTable: nil,
+
+		game:    "",
+		gameKey: "",
+
+		rolling:         false,
+		gabParticipants: nil,
+		needLimit:       defaultNeedLimit,
+	}
 	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
 
 	needState = make(map[string][]time.Time)
 
-	gabPrefix = defaultPrefix
+	globalState.commands = getDefaultGabCommandsAndAliases()
 
-	commands = make(map[string]*GabCommand)
-	aliases = make(map[string]GabAlias)
-
-	commands["start"] = &GabCommand{
-		"start",
-		"[game name] [key]",
-		T("start_command_desc"),
-		true,
-		false,
-		false,
-		startGiveawayCommand,
-	}
-	commands["stop"] = &GabCommand{
-		"stop",
-		"",
-		T("stop_command_desc"),
-		true,
-		false,
-		false,
-		stopGiveawayCommand,
-	}
-	commands["debug"] = &GabCommand{
-		"debug",
-		"[dm|mention]",
-		T("debug_command_desc"),
-		true,
-		false,
-		false,
-		debugCommand,
-	}
-	commands["roll"] = &GabCommand{
-		"roll",
-		"[greed|need]",
-		T("roll_command_desc"),
-		false,
-		false,
-		false,
-		rollCommand,
-	}
-	aliases["r"] = GabAlias{
-		"r",
-		commands["roll"],
-	}
-	commands["localroll"] = &GabCommand{
-		"localroll",
-		"[greed|need]",
-		T("localroll_command_desc"),
-		false,
-		false,
-		false,
-		rollCommand,
-	}
-	aliases["lr"] = GabAlias{
-		"lr",
-		commands["localroll"],
-	}
-	commands["status"] = &GabCommand{
-		"status",
-		"",
-		T("status_command_desc"),
-		false,
-		false,
-		false,
-		statusCommand,
-	}
-	aliases["current"] = GabAlias{
-		"current",
-		commands["status"],
-	}
-	commands["listcommands"] = &GabCommand{
-		"listcommands",
-		"",
-		T("listcommands_command_desc"),
-		false,
-		false,
-		false,
-		listCommandsCommand,
-	}
-	commands["talk"] = &GabCommand{
-		"talk",
-		"message",
-		T("talk_command_desc"),
-		false,
-		false,
-		false,
-		talkCommand,
-	}
-	commands["help"] = &GabCommand{
-		"help",
-		"",
-		T("help_command_desc"),
-		false,
-		false,
-		false,
-		helpCommand,
-	}
-	aliases["info"] = GabAlias{
-		"info",
-		commands["help"],
-	}
-	commands["notify"] = &GabCommand{
-		"notify",
-		"",
-		T("notify_command_desc"),
-		false,
-		true,
-		false,
-		notifyCommand,
-	}
-	commands["unnotify"] = &GabCommand{
-		"unnotify",
-		"",
-		T("unnotify_command_desc"),
-		false,
-		true,
-		false,
-		unnotifyCommand,
-	}
-	commands["listnotes"] = &GabCommand{
-		"listnotes",
-		"",
-		T("listnotes_command_desc"),
-		true,
-		false,
-		true,
-		listNotesCommand,
-	}
-
-	aliasTable = makeAliasTable(aliases)
-
-	needLimit = defaultNeedLimit
-}
-
-func makeAliasTable(aliases GabAliases) (aliasTable map[string][]string) {
-	aliasTable = make(map[string][]string)
-	for _, alias := range aliases {
-		aliasTable[alias.command.name] = append(aliasTable[alias.command.name], alias.name)
-	}
-
-	return aliasTable
+	globalState.aliasTable = makeAliasTable(globalState.aliases)
 }
 
 func main() {
@@ -328,7 +188,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	// check if the message starts with defined gabPrefix
-	if !strings.HasPrefix(m.Content, gabPrefix) {
+	if !strings.HasPrefix(m.Content, globalState.gabPrefix) {
 		return
 	}
 
@@ -341,13 +201,13 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	prefixCommand := strings.Split(m.Content, " ")[0]
 	fmt.Printf("%s : %s\n", m.Author.Username, prefixCommand)
-	commandName := strings.Replace(prefixCommand, gabPrefix, "", 1)
+	commandName := strings.Replace(prefixCommand, globalState.gabPrefix, "", 1)
 
 	var command *GabCommand = nil
 
-	if validAlias, ok := aliases[commandName]; ok {
+	if validAlias, ok := globalState.aliases[commandName]; ok {
 		command = validAlias.command
-	} else if validCommand, ok := commands[commandName]; ok {
+	} else if validCommand, ok := globalState.commands[commandName]; ok {
 		command = validCommand
 	}
 
