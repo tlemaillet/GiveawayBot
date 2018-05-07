@@ -146,13 +146,13 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 }
 
 func hasReachedNeedLimit(user *discordgo.User) bool {
-	if userNeed, exist := needState[user.ID]; exist {
-		if len(userNeed) <= globalState.needLimit {
+	if needEntries, exist := needState[user.ID]; exist {
+		if len(needEntries) <= globalState.needLimit {
 			return false
 		} else {
 			count := 0
-			for _, needTime := range userNeed {
-				if needTime.After(time.Now().AddDate(0, -1, 0)) {
+			for _, needEntry := range needEntries {
+				if needEntry.date.After(time.Now().AddDate(0, -1, 0)) {
 					count++
 				}
 			}
@@ -167,7 +167,8 @@ func hasReachedNeedLimit(user *discordgo.User) bool {
 }
 
 func addNeedTry(user *discordgo.User) (err error) {
-	needState[user.ID] = append(needState[user.ID], time.Now())
+	needState[user.ID] = append(needState[user.ID], &GabNeedEntry{globalState.game,time.Now()})
+	localDatabase.Write("needState", "needState", needState)
 	// TODO add persistance
 	return nil
 }

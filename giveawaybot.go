@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/nanobox-io/golang-scribble"
 	"github.com/nicksnyder/go-i18n/i18n"
 )
 
@@ -64,11 +66,16 @@ type GabGuildState struct {
 	guild *discordgo.Guild
 }
 
-type GabNeedState map[string][]time.Time
+type GabNeedEntry struct {
+	game   string
+	date   time.Time
+}
+type GabNeedState map[string][]*GabNeedEntry
 
 const defaultPrefix = "!gab"
 const defaultNeedLimit = 2
 
+var localDatabase *scribble.Driver
 var globalState GabState
 var guildsState map[string]GabGuildState
 var needState GabNeedState
@@ -77,9 +84,11 @@ var token string
 
 func init() {
 	var translationFile string
+	var databaseDirectory string
 
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.StringVar(&translationFile, "T", "en_US.all.json", "Translation")
+	flag.StringVar(&databaseDirectory, "d", "./data", "Database directory")
 	flag.Parse()
 
 	if token == "" {
@@ -94,14 +103,14 @@ func init() {
 	T, err = i18n.Tfunc(translationName)
 	if err != nil {
 		fmt.Errorf("error creating translation function:\n %s\n", err)
-		return
+		os.Exit(1)
 	}
 
 	globalState = GabState{
 		gabPrefix: defaultPrefix,
 
-		commands:   make(map[string]*GabCommand),
-		aliases:    make(map[string]GabAlias),
+		commands:   make(GabCommands),
+		aliases:    make(GabAliases),
 		aliasTable: nil,
 
 		game:    "",
@@ -113,8 +122,44 @@ func init() {
 	}
 	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
 
+
+
+
+
+
+
+
+
 	// TODO add persistance
-	needState = make(map[string][]time.Time)
+	// needState = make(GabNeedState)
+
+	localDatabase, err = scribble.New(databaseDirectory, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	record, err := localDatabase.ReadAll("needState")
+	if perr, ok := err.(*os.PathError); ok {
+		fmt.Println("faut creer le fichier")
+		os.OpenFile(perr.Path, os.O_RDONLY|os.O_CREATE, 0600)
+		record, err = localDatabase.ReadAll("needState")
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	} else if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	needState = make(GabNeedState)
+	for test, n := range record {
+		_ = test
+		if err := json.Unmarshal([]byte(n), &needState); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
 
 	globalState.commands = getDefaultGabCommandsAndAliases()
 
