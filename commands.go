@@ -294,7 +294,9 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		case "need":
 			need = true
 		default:
-			need = false
+			s.ChannelMessageSend(c.ID,
+				T("syntax_error", TInter{"Command": message[0], "Option": message[1]}))
+			return
 		}
 	}
 
