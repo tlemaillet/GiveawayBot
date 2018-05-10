@@ -22,71 +22,25 @@ var T i18n.TranslateFunc
 
 type TInter map[string]interface{}
 
-type GabCommand struct {
-	name        string
-	options     string
-	description string
-	needsAdmin  bool
-	needsServer bool
-	hidden      bool
-	callback    func(session *discordgo.Session, message *discordgo.MessageCreate)
-}
-type GabCommands map[string]*GabCommand
-
-type GabAlias struct {
-	name    string
-	command *GabCommand
-}
-type GabAliases map[string]GabAlias
-
-type GabParticipant struct {
-	User  *discordgo.User
-	score int
-	need  bool
-}
-type GabParticipants map[string]GabParticipant
-
-type GabState struct {
-	gabPrefix string
-
-	commands   GabCommands
-	aliases    GabAliases
-	aliasTable map[string][]string
-
-	game    string
-	gameKey string
-
-	rolling         bool
-	gabParticipants GabParticipants
-	needLimit       int
-}
-type GabGuildState struct {
-	state GabState
-	guild *discordgo.Guild
-}
-
-type GabNeedEntry struct {
-	Game string
-	Date time.Time
-}
-type GabNeedState map[string][]GabNeedEntry
-
 const defaultPrefix = "!gab"
 const defaultNeedLimit = 2
 
-var globalState GabState
-var guildsState map[string]GabGuildState
-var needState GabNeedState
+var globalState GlobalState
+var needState NeedState
 var needDataFile string
 
 var token string
 
 func init() {
 	var translationFile string
+	var dataDirectory string
+	var globalStateFile string
 
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.StringVar(&translationFile, "T", "en_US.all.json", "Translation")
+	flag.StringVar(&dataDirectory, "D", "./gabData", "dataDirectory")
 	flag.StringVar(&needDataFile, "d", "./needData.gob", "Need data file")
+	flag.StringVar(&globalStateFile, "g", "./globalState.gob", "Global State file")
 	flag.Parse()
 
 	if token == "" {
@@ -104,48 +58,31 @@ func init() {
 		os.Exit(1)
 	}
 
-	globalState = GabState{
-		gabPrefix: defaultPrefix,
 
-		commands:   make(GabCommands),
-		aliases:    make(GabAliases),
-		aliasTable: nil,
-
-		game:    "",
-		gameKey: "",
-
-		rolling:         false,
-		gabParticipants: nil,
-		needLimit:       defaultNeedLimit,
-	}
-	_ = guildsState // TODO guildsState = make(map[string]GabGuildState)
-
-
-	// Try to recover need data from file
-	reader, err := os.OpenFile(needDataFile, os.O_RDONLY|os.O_CREATE, 0600)
+	gsReader, err := os.OpenFile(globalStateFile, os.O_RDONLY|os.O_CREATE, 0600)
 	if err != nil {
 		log.Fatal("data file opening error", err)
 		os.Exit(1)
 	} else {
-		dec := gob.NewDecoder(reader)
+		dec := gob.NewDecoder(gsReader)
 
-		err = dec.Decode(&needState)
+		err = dec.Decode(&globalState)
 		if err != nil {
 			fmt.Println("decode error:", err)
-			needState = make(GabNeedState)
+			globalState = GlobalState{
+				Alliances: make(map[string]*Alliance),
+				DataDirectory: dataDirectory,
+				BotToken: token,
+			}
 		}
 	}
-	reader.Close()
+	gsReader.Close()
 
-
-
-	globalState.commands = getDefaultGabCommandsAndAliases()
-
-	globalState.aliasTable = makeAliasTable(globalState.aliases)
+	initCommandList()
 }
 
 func main() {
-	dg, err := discordgo.New("Bot " + token)
+	dg, err := discordgo.New("Bot " + globalState.BotToken)
 	if err != nil {
 		fmt.Println("Error creating Discord session: ", err)
 		return
@@ -169,7 +106,6 @@ func main() {
 		fmt.Println("Error opening Discord session: ", err)
 		return
 	}
-
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("GiveawayBot is now running.  Press CTRL-C to exit.")
@@ -213,8 +149,21 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
+	var state *State
+	// Find the alliance that the message came from
+	alliance, err := getAllianceFromMessage(s, m)
+	if err != nil {
+		// No alliance found for message, defaulting to default prefix and disabling most commands
+		state = &State {
+			GabPrefix: defaultPrefix,
+		}
+		state.Commands, state.Aliases = getfallbackCommandsAndAliases()
+	} else {
+		state = alliance.State
+	}
+
 	// check if the message starts with defined gabPrefix
-	if !strings.HasPrefix(m.Content, globalState.gabPrefix) {
+	if !strings.HasPrefix(m.Content, state.GabPrefix) {
 		return
 	}
 
@@ -227,22 +176,24 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	prefixCommand := strings.Split(m.Content, " ")[0]
 	fmt.Printf("%s : %s\n", m.Author.Username, prefixCommand)
-	commandName := strings.Replace(prefixCommand, globalState.gabPrefix, "", 1)
+	commandName := strings.Replace(prefixCommand, state.GabPrefix, "", 1)
 
-	var command *GabCommand = nil
 
-	if validAlias, ok := globalState.aliases[commandName]; ok {
-		command = validAlias.command
-	} else if validCommand, ok := globalState.commands[commandName]; ok {
+
+
+	var command *Command = nil
+	if validAlias, ok := state.Aliases[commandName]; ok {
+		command = validAlias.Command
+	} else if validCommand, ok := state.Commands[commandName]; ok {
 		command = validCommand
 	}
 
 	if command != nil {
-		if command.needsAdmin && !isGabsAdmin(m.Author) {
+		if command.NeedsCreator && !isGabCreator(m.Author) {
 			return
 		}
 
-		if command.needsServer {
+		if command.NeedsGuild {
 			_, err := s.Guild(c.GuildID)
 			if err != nil {
 				s.ChannelMessageSend(c.ID, T("serv_command_only"))
@@ -250,7 +201,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 		}
 
-		command.callback(s, m)
+		command.Callback(s, m, state)
 		return
 	} else {
 		s.ChannelMessageSend(c.ID, T("shout_gab"))

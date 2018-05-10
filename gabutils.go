@@ -11,25 +11,66 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func makeAliasTable(aliases GabAliases) (aliasTable map[string][]string) {
+func makeAliasTable(aliases Aliases) (aliasTable map[string][]string) {
 	aliasTable = make(map[string][]string)
 	for _, alias := range aliases {
-		aliasTable[alias.command.name] = append(aliasTable[alias.command.name], alias.name)
+		aliasTable[alias.Command.Name] = append(aliasTable[alias.Command.Name], alias.Name)
 	}
 
 	return aliasTable
 }
 
-func isGabsAdmin(u *discordgo.User) bool {
-	if u.ID == "137509464759599104" {
+func isGabCreator(user *discordgo.User) bool {
+	if user.ID == "137509464759599104" {
 		return true
 	} else {
 		return false
 	}
 }
 
-func hasRolePermissions(s *discordgo.Session, c *discordgo.Channel) (bool, error) {
-	apermission, err := s.State.UserChannelPermissions(s.State.User.ID, c.ID)
+func checkPermissionsForCommand(s *State, c *Command, u *discordgo.User) bool {
+	if c.NeedsCreator && !isGabCreator(u) {
+		return false
+	} else if isGabCreator(u) {
+		return true
+	}
+
+	return false
+}
+
+func getAllianceFromMessage(session *discordgo.Session, message *discordgo.MessageCreate) (alliance *Alliance, err error) {
+
+	channel, err := session.State.Channel(message.ChannelID)
+	guild, err := session.State.Guild(channel.GuildID)
+	_ = guild
+
+
+	return nil, errors.New("damn son, no alliance wants you")
+}
+
+func createAlliance(name string, message discordgo.MessageCreate) (alliance *Alliance) {
+	defaultState := &State{
+		GabPrefix: defaultPrefix,
+		Rolling:      false,
+		NeedLimit:    defaultNeedLimit,
+	}
+	defaultState.Commands, defaultState.Aliases = getDefaultGabCommandsAndAliases()
+	defaultState.AliasTable = makeAliasTable(defaultState.Aliases)
+
+	alliance = &Alliance{
+		Name: name,
+		State: defaultState,
+		Admin: message.Author.ID,
+		Guilds: make(map[string]*discordgo.Guild),
+	}
+
+	*alliance.NeedState = make(NeedState)
+
+	return alliance
+}
+
+func hasRolePermissions(session *discordgo.Session, channel *discordgo.Channel) (bool, error) {
+	apermission, err := session.State.UserChannelPermissions(session.State.User.ID, channel.ID)
 	if err != nil {
 		return false, err
 	}
@@ -41,13 +82,13 @@ func hasRolePermissions(s *discordgo.Session, c *discordgo.Channel) (bool, error
 	}
 }
 
-func addNotifyRoleToUser(s *discordgo.Session, g *discordgo.Guild, u *discordgo.User) (err error) {
+func addNotifyRoleToUser(session *discordgo.Session, guild *discordgo.Guild, user *discordgo.User) (err error) {
 
-	notifyRole, err := findNotifyRole(g)
+	notifyRole, err := findNotifyRole(guild)
 	if err != nil {
 		return err
 	}
-	err = s.GuildMemberRoleAdd(g.ID, u.ID, notifyRole.ID)
+	err = session.GuildMemberRoleAdd(guild.ID, user.ID, notifyRole.ID)
 
 	return err
 }
@@ -148,9 +189,9 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 	}
 }
 
-func hasReachedNeedLimit(user *discordgo.User) bool {
+func hasReachedNeedLimit(user *discordgo.User, state *State) bool {
 	if needEntries, exist := needState[user.ID]; exist {
-		if len(needEntries) < globalState.needLimit {
+		if len(needEntries) < state.NeedLimit {
 			return false
 		} else {
 			count := 0
@@ -159,7 +200,7 @@ func hasReachedNeedLimit(user *discordgo.User) bool {
 					count++
 				}
 			}
-			if count < globalState.needLimit {
+			if count < state.NeedLimit {
 				return false
 			}
 		}
@@ -169,9 +210,9 @@ func hasReachedNeedLimit(user *discordgo.User) bool {
 	return true
 }
 
-func addNeedTry(user *discordgo.User) (err error) {
+func addNeedTry(user *discordgo.User, state *State) (err error) {
 	needState[user.ID] = append(needState[user.ID],
-		GabNeedEntry{globalState.game, time.Now()})
+		NeedEntry{Game: state.Game, Date: time.Now()})
 
 	err = persistNeedData(needState)
 	if err != nil {
@@ -181,32 +222,32 @@ func addNeedTry(user *discordgo.User) (err error) {
 	return nil
 }
 
-func getWinnerFromParticipants(participants GabParticipants) (winner GabParticipant, err error) {
+func getWinnerFromParticipants(participants Participants) (winner *Participant, err error) {
 	needed := false
 	bestScore := -1
 
 	for _, participant := range participants {
-		if needed && !participant.need {
+		if needed && !participant.Need {
 			continue
 		}
 
-		if !needed && participant.need {
-			bestScore = participant.score
+		if !needed && participant.Need {
+			bestScore = participant.Score
 			winner = participant
 			needed = true
 			continue
 		}
 
-		if participant.score > bestScore {
+		if participant.Score > bestScore {
 			winner = participant
-			bestScore = participant.score
+			bestScore = participant.Score
 		}
 	}
 
 	return winner, nil
 }
 
-func persistNeedData(state GabNeedState) (err error) {
+func persistNeedData(state NeedState) (err error) {
 	reader, err := os.OpenFile(needDataFile, os.O_WRONLY, 0600)
 	if err != nil {
 		log.Fatal("data file write opening error", err)
