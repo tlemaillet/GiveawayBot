@@ -40,7 +40,7 @@ func init() {
 	flag.StringVar(&translationFile, "T", "en_US.all.json", "Translation")
 	flag.StringVar(&dataDirectory, "D", "./gabData", "dataDirectory")
 	flag.StringVar(&needDataFile, "d", "./needData.gob", "Need data file")
-	flag.StringVar(&globalStateFile, "g", "./globalState.gob", "Global State file")
+	flag.StringVar(&globalStateFile, "g", "globalState.gob", "Global State file")
 	flag.Parse()
 
 	if token == "" {
@@ -58,26 +58,33 @@ func init() {
 		os.Exit(1)
 	}
 
-
-	gsReader, err := os.OpenFile(globalStateFile, os.O_RDONLY|os.O_CREATE, 0600)
-	if err != nil {
+	gsReader, err := os.OpenFile(dataDirectory + "/" + globalStateFile, os.O_RDONLY, 0600)
+	if perr, ok := err.(*os.PathError); ok {
+		fmt.Println(perr)
+		initGlobalState(dataDirectory, globalStateFile)
+	} else if err != nil {
 		log.Fatal("data file opening error", err)
 		os.Exit(1)
 	} else {
+
 		dec := gob.NewDecoder(gsReader)
 
 		err = dec.Decode(&globalState)
 		if err != nil {
 			fmt.Println("decode error:", err)
-			globalState = GlobalState{
-				Alliances: make(map[string]*Alliance),
-				DataDirectory: dataDirectory,
-				BotToken: token,
-			}
+			initGlobalState(dataDirectory, globalStateFile)
 		}
 	}
 	gsReader.Close()
+}
 
+func initGlobalState(dataDirectory string, globalStateFile string){
+	globalState = GlobalState{
+		Alliances:       make(map[string]*Alliance),
+		DataDirectory:   dataDirectory,
+		GlobalStateFile: globalStateFile,
+		BotToken:        token,
+	}
 	initCommandList()
 }
 
@@ -100,7 +107,7 @@ func main() {
 	// Open the websocket and begin listening.
 	err = dg.Open()
 	// Cleanly close down the Discord session on return.
-	defer persistNeedData(needState)
+	defer persistGlobalData(globalState)
 	defer dg.Close()
 	if err != nil {
 		fmt.Println("Error opening Discord session: ", err)
@@ -154,7 +161,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	alliance, err := getAllianceFromMessage(s, m)
 	if err != nil {
 		// No alliance found for message, defaulting to default prefix and disabling most commands
-		state = &State {
+		state = &State{
 			GabPrefix: defaultPrefix,
 		}
 		state.Commands, state.Aliases = getfallbackCommandsAndAliases()
@@ -178,9 +185,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	fmt.Printf("%s : %s\n", m.Author.Username, prefixCommand)
 	commandName := strings.Replace(prefixCommand, state.GabPrefix, "", 1)
 
-
-
-
 	var command *Command = nil
 	if validAlias, ok := state.Aliases[commandName]; ok {
 		command = validAlias.Command
@@ -201,9 +205,9 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 		}
 
-		command.Callback(s, m, state)
+		command.Callback(s, m, alliance)
 		return
 	} else {
-		s.ChannelMessageSend(c.ID, T("shout_gab"))
+		s.ChannelMessageSend(c.ID, T("unknown_command"))
 	}
 }

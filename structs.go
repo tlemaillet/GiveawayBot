@@ -17,7 +17,7 @@ type Command struct {
 	NeedsGuildOwner    bool
 	NeedsGuildAdmin    bool
 	Hidden             bool
-	Callback           func(session *discordgo.Session, message *discordgo.MessageCreate, state *State)
+	Callback           func(session *discordgo.Session, message *discordgo.MessageCreate, alliance *Alliance)
 }
 type Commands map[string]*Command
 
@@ -52,17 +52,19 @@ type Alliance struct {
 	Name       string
 	Admin      string
 	State      *State
-	NeedState  *NeedState
+	NeedState  NeedState
 	Moderators []string
-	Guilds     map[string]*discordgo.Guild
+	Guilds     []string
 }
 
 type GlobalState struct {
-	Alliances     map[string]*Alliance
-	DataDirectory string
-	CommandList   map[string]*Command
-	AliasList     map[string]*Alias
-	BotToken      string
+	Alliances       map[string]*Alliance
+	DataDirectory   string
+	GlobalStateFile string
+	CommandList     map[string]*Command
+	AliasList       map[string]*Alias
+	BotToken        string
+	GuildTable		map[string]string
 }
 
 type NeedEntry struct {

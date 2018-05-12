@@ -114,6 +114,19 @@ func initCommandList() {
 		Hidden:       true,
 		Callback:     listNotesCommand,
 	}
+	commands["alliancecreate"] = &Command{
+		Name:            "alliancecreate",
+		Options:         "<alliance name> ",
+		Description:     T("alliancecreate_command_desc"),
+		NeedsGuildAdmin: true,
+		NeedsGuild:      true,
+		Hidden:          true,
+		Callback:        createAllianceCommand,
+	}
+	aliases["ac"] = &Alias{
+		Name:    "ac",
+		Command: commands["alliancecreate"],
+	}
 
 	globalState.CommandList = commands
 	globalState.AliasList = aliases
@@ -130,11 +143,13 @@ func getfallbackCommandsAndAliases() (commands Commands, aliases Aliases) {
 	commands = make(Commands)
 	aliases = make(Aliases)
 	commands["help"] = globalState.CommandList["inithelp"]
+	commands["alliancecreate"] = globalState.CommandList["alliancecreate"]
+	aliases["ac"] = globalState.AliasList["ac"]
 
 	return commands, aliases
 }
 
-func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
 	if err != nil {
@@ -144,26 +159,26 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate, state
 
 	var message = T("command_list") + "\n"
 
-	for _, command := range state.Commands {
+	for _, command := range alliance.State.Commands {
 		if command.Hidden {
 			continue
 		}
 
-		message += state.GabPrefix + command.Name + "\n" +
+		message += alliance.State.GabPrefix + command.Name + "\n" +
 			"\t" + command.Description + "\n"
 
 		if command.Options != "" {
 			message += "\t" + T("options", 2) + " : " +
-				state.GabPrefix + command.Name + " " + command.Options + "\n"
+				alliance.State.GabPrefix + command.Name + " " + command.Options + "\n"
 		}
 
-		if aliases, ok := state.AliasTable[command.Name]; ok {
+		if aliases, ok := alliance.State.AliasTable[command.Name]; ok {
 			message += "\t" + T("alias", 2) + " : "
 			for i, alias := range aliases {
 				if i != 0 {
 					message += ", "
 				}
-				message += state.GabPrefix + alias
+				message += alliance.State.GabPrefix + alias
 			}
 			message += "\n"
 		}
@@ -171,7 +186,7 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate, state
 	s.ChannelMessageSend(c.ID, message)
 }
 
-func listNotesCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func listNotesCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 	err := s.UserNoteSet("137509464759599104", "Le Createur!")
 	if err != nil {
 		fmt.Println(err)
@@ -182,7 +197,49 @@ func listNotesCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *S
 	}
 }
 
-func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func createAllianceCommand(session *discordgo.Session, message *discordgo.MessageCreate, alliance *Alliance) {
+	// Find the channel that the message came from.
+	channel, err := session.State.Channel(message.ChannelID)
+	if err != nil {
+		// Could not find channel.
+		return
+	}
+
+	args, err := parseArguments(message.Content)
+	if err != nil {
+		session.ChannelMessageSend(channel.ID, T("createalliance_usage"))
+		return
+	}
+
+	guild, err := session.State.Guild(channel.GuildID)
+	if err != nil {
+		// Could not find channel.
+		return
+	}
+
+	name := args[1]
+	if name == ""  {
+		session.ChannelMessageSend(channel.ID, T("createalliance_usage"))
+		return
+	}
+
+	if alliance, exists := globalState.Alliances[name]; exists {
+		owner, err:= session.User(alliance.Admin)
+		if err != nil {
+			owner.Username = "NotFound"
+		}
+
+		session.ChannelMessageSend(channel.ID,
+			T("alliance_already_exists",
+				TInter{"Alliance": alliance.Name, "Owner": owner.Username}))
+	}
+
+	newAlliance := createAlliance(name, guild, message.Author)
+
+	globalState.Alliances[name] = newAlliance
+}
+
+func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 
 	tmp := strings.Split(m.Content, " ")[1:]
 	startMessage := strings.Join(tmp, " ")
@@ -194,8 +251,8 @@ func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, stat
 		return
 	}
 
-	if state.Rolling {
-		s.ChannelMessageSend(c.ID, T("giveaway_already_active", TInter{"Game": state.Game}))
+	if alliance.State.Rolling {
+		s.ChannelMessageSend(c.ID, T("giveaway_already_active", TInter{"Game": alliance.State.Game}))
 		return
 	}
 	startArgs, err := parseArguments(startMessage)
@@ -210,17 +267,17 @@ func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, stat
 	if len(startArgs) != 2 {
 		s.ChannelMessageSend(c.ID, T("start_usage"))
 	} else {
-		state.Game = startArgs[0]
-		state.GameKey = startArgs[1]
-		state.Participants = map[string]*Participant{}
-		state.Rolling = true
+		alliance.State.Game = startArgs[0]
+		alliance.State.GameKey = startArgs[1]
+		alliance.State.Participants = map[string]*Participant{}
+		alliance.State.Rolling = true
 		sendToAllGuilds(s,
 			T("start_announcement",
-				TInter{"Game": state.Game}))
+				TInter{"Game": alliance.State.Game}))
 	}
 }
 
-func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
@@ -229,13 +286,13 @@ func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, state
 		return
 	}
 
-	if !state.Rolling {
+	if !alliance.State.Rolling {
 		s.ChannelMessageSend(c.ID, T("giveaway_already_inactive"))
 		return
 	}
-	state.Rolling = false
-	if len(state.Participants) != 0 {
-		winnerParticipant, _ := getWinnerFromParticipants(state.Participants)
+	alliance.State.Rolling = false
+	if len(alliance.State.Participants) != 0 {
+		winnerParticipant, _ := getWinnerFromParticipants(alliance.State.Participants)
 		winner := winnerParticipant.User
 
 		sendToAllGuilds(s, T("winner_announcement_start"))
@@ -259,14 +316,14 @@ func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, state
 		s.ChannelMessageSend(channel.ID,
 			T("winner_dm",
 				TInter{"Person": winner.Username,
-					"Key": state.GameKey}))
+					"Key": alliance.State.GameKey}))
 
 	} else {
 		sendToAllGuilds(s, T("no_players"))
 	}
 }
 
-func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
 	if err != nil {
@@ -274,7 +331,7 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State)
 		return
 	}
 
-	if !state.Rolling {
+	if !alliance.State.Rolling {
 		s.ChannelMessageSend(c.ID, T("giveaway_inactive"))
 		return
 	}
@@ -304,9 +361,9 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State)
 		}
 	}
 
-	commandName := strings.Replace(prefixCommand, state.GabPrefix, "", 1)
+	commandName := strings.Replace(prefixCommand, alliance.State.GabPrefix, "", 1)
 
-	if participant, exist := state.Participants[m.Author.ID]; exist {
+	if participant, exist := alliance.State.Participants[m.Author.ID]; exist {
 		if participant.Need {
 
 			s.ChannelMessageSend(c.ID,
@@ -320,20 +377,21 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State)
 						"Count": participant.Score}))
 
 		}
-	} else if need && hasReachedNeedLimit(m.Author, state) {
+	} else if alliance, err := getAllianceFromMessage(s, m);
+		err != nil && need && hasReachedNeedLimit(m.Author, alliance) {
 		s.ChannelMessageSend(c.ID, T("reached_need_limit"))
 	} else {
 		roll := rndm.Intn(100)
 
 		if need {
-			err := addNeedTry(m.Author, state)
+			err := addNeedTry(m.Author, alliance.State)
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
 		}
 
-		state.Participants[m.Author.ID] = &Participant{
+		alliance.State.Participants[m.Author.ID] = &Participant{
 			User:  m.Author,
 			Score: roll,
 			Need:  need,
@@ -352,7 +410,7 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State)
 	}
 }
 
-func statusCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func statusCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
@@ -361,16 +419,16 @@ func statusCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *Stat
 		return
 	}
 
-	if state.Rolling {
+	if alliance.State.Rolling {
 		s.ChannelMessageSend(c.ID,
-			T("giveaway_active", TInter{"Game": state.Game}))
+			T("giveaway_active", TInter{"Game": alliance.State.Game}))
 	} else {
 		s.ChannelMessageSend(c.ID,
 			T("giveaway_inactive"))
 	}
 }
 
-func notifyCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func notifyCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
 	if err != nil {
@@ -405,7 +463,7 @@ func notifyCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *Stat
 	s.ChannelMessageSend(c.ID, T("added_notify_role"))
 }
 
-func unnotifyCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func unnotifyCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
 	if err != nil {
@@ -439,7 +497,7 @@ func unnotifyCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *St
 	s.ChannelMessageSend(c.ID, T("removed_notify_role"))
 }
 
-func talkCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func talkCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 	message := strings.Join(strings.Split(m.Content, " ")[1:], " ")
 
 	// Find the channel that the message came from.
@@ -463,7 +521,20 @@ func talkCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State)
 	sendToAllGuilds(s, say)
 }
 
-func helpCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func helpCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
+
+	helpMessage := strings.Join(strings.Split(m.Content, " ")[1:], " ")
+
+	var message string
+
+	switch helpMessage {
+	case "greed", "need":
+		message = T("need_help")
+	case "alliances":
+		message = T("alliances_help")
+
+	}
+
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
 	if err != nil {
@@ -471,11 +542,10 @@ func helpCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State)
 		return
 	}
 
-	s.ChannelMessageSend(c.ID,
-		T("usage"))
+	s.ChannelMessageSend(c.ID, message)
 }
 
-func initHelpCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func initHelpCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
 	if err != nil {
@@ -487,7 +557,7 @@ func initHelpCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *St
 		T("initHelp"))
 }
 
-func shoutCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func shoutCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 	// Find the channel that the message came from.
 	c, err := s.State.Channel(m.ChannelID)
 	if err != nil {
@@ -499,7 +569,7 @@ func shoutCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State
 		T("shout_gab"))
 }
 
-func debugCommand(s *discordgo.Session, m *discordgo.MessageCreate, state *State) {
+func debugCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
 
 	debugMessage := strings.Join(strings.Split(m.Content, " ")[1:], " ")
 

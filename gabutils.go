@@ -44,27 +44,27 @@ func getAllianceFromMessage(session *discordgo.Session, message *discordgo.Messa
 	guild, err := session.State.Guild(channel.GuildID)
 	_ = guild
 
-
 	return nil, errors.New("damn son, no alliance wants you")
 }
 
-func createAlliance(name string, message discordgo.MessageCreate) (alliance *Alliance) {
+func createAlliance(name string, guild *discordgo.Guild, admin *discordgo.User) (alliance *Alliance) {
+
 	defaultState := &State{
 		GabPrefix: defaultPrefix,
-		Rolling:      false,
-		NeedLimit:    defaultNeedLimit,
+		Rolling:   false,
+		NeedLimit: defaultNeedLimit,
 	}
 	defaultState.Commands, defaultState.Aliases = getDefaultGabCommandsAndAliases()
 	defaultState.AliasTable = makeAliasTable(defaultState.Aliases)
 
 	alliance = &Alliance{
-		Name: name,
+		Name:  name,
 		State: defaultState,
-		Admin: message.Author.ID,
-		Guilds: make(map[string]*discordgo.Guild),
+		Admin: admin.ID,
+		Guilds: append([]string{}, guild.ID),
 	}
 
-	*alliance.NeedState = make(NeedState)
+	alliance.NeedState = make(NeedState)
 
 	return alliance
 }
@@ -189,9 +189,9 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 	}
 }
 
-func hasReachedNeedLimit(user *discordgo.User, state *State) bool {
-	if needEntries, exist := needState[user.ID]; exist {
-		if len(needEntries) < state.NeedLimit {
+func hasReachedNeedLimit(user *discordgo.User, alliance *Alliance) bool {
+	if needEntries, exist := alliance.NeedState[user.ID]; exist {
+		if len(needEntries) < alliance.State.NeedLimit {
 			return false
 		} else {
 			count := 0
@@ -200,7 +200,7 @@ func hasReachedNeedLimit(user *discordgo.User, state *State) bool {
 					count++
 				}
 			}
-			if count < state.NeedLimit {
+			if count < alliance.State.NeedLimit {
 				return false
 			}
 		}
@@ -214,7 +214,7 @@ func addNeedTry(user *discordgo.User, state *State) (err error) {
 	needState[user.ID] = append(needState[user.ID],
 		NeedEntry{Game: state.Game, Date: time.Now()})
 
-	err = persistNeedData(needState)
+	err = persistGlobalData(globalState)
 	if err != nil {
 		needState[user.ID] = needState[user.ID][:len(needState[user.ID])-1]
 		return err
@@ -247,8 +247,8 @@ func getWinnerFromParticipants(participants Participants) (winner *Participant, 
 	return winner, nil
 }
 
-func persistNeedData(state NeedState) (err error) {
-	reader, err := os.OpenFile(needDataFile, os.O_WRONLY, 0600)
+func persistGlobalData(state GlobalState) (err error) {
+	reader, err := os.OpenFile(globalState.DataDirectory + "/" + globalState.GlobalStateFile, os.O_WRONLY, 0600)
 	if err != nil {
 		log.Fatal("data file write opening error", err)
 		os.Exit(1)
