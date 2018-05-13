@@ -81,6 +81,7 @@ func init() {
 func initGlobalState(dataDirectory string, globalStateFile string){
 	globalState = GlobalState{
 		Alliances:       make(map[string]*Alliance),
+		GuildTable:      make(map[string][]string),
 		DataDirectory:   dataDirectory,
 		GlobalStateFile: globalStateFile,
 		BotToken:        token,
@@ -205,9 +206,14 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 		}
 
+		if command.Callback == nil {
+			s.ChannelMessageSend(c.ID, T("wtf"))
+			return
+		}
+
 		command.Callback(s, m, alliance)
-		return
 	} else {
 		s.ChannelMessageSend(c.ID, T("unknown_command"))
 	}
+	return
 }

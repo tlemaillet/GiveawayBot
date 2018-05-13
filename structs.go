@@ -59,12 +59,12 @@ type Alliance struct {
 
 type GlobalState struct {
 	Alliances       map[string]*Alliance
+	GuildTable		map[string][]string
 	DataDirectory   string
 	GlobalStateFile string
 	CommandList     map[string]*Command
 	AliasList       map[string]*Alias
 	BotToken        string
-	GuildTable		map[string]string
 }
 
 type NeedEntry struct {

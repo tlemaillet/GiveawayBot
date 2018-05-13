@@ -120,12 +120,22 @@ func initCommandList() {
 		Description:     T("alliancecreate_command_desc"),
 		NeedsGuildAdmin: true,
 		NeedsGuild:      true,
-		Hidden:          true,
 		Callback:        createAllianceCommand,
 	}
 	aliases["ac"] = &Alias{
 		Name:    "ac",
 		Command: commands["alliancecreate"],
+	}
+	commands["alliancedelete"] = &Command{
+		Name:               "alliancedelete",
+		Options:            "<alliance name> ",
+		Description:        T("alliancedelete_command_desc"),
+		NeedsAllianceAdmin: true,
+		Callback:           deleteAllianceCommand,
+	}
+	aliases["ad"] = &Alias{
+		Name:    "ad",
+		Command: commands["alliancedelete"],
 	}
 
 	globalState.CommandList = commands
@@ -216,15 +226,14 @@ func createAllianceCommand(session *discordgo.Session, message *discordgo.Messag
 		// Could not find channel.
 		return
 	}
-
-	name := args[1]
-	if name == ""  {
+	if len(args) != 2 && args[1] != "" {
 		session.ChannelMessageSend(channel.ID, T("createalliance_usage"))
 		return
 	}
+	allianceName := args[1]
 
-	if alliance, exists := globalState.Alliances[name]; exists {
-		owner, err:= session.User(alliance.Admin)
+	if alliance, exists := globalState.Alliances[allianceName]; exists {
+		owner, err := session.User(alliance.Admin)
 		if err != nil {
 			owner.Username = "NotFound"
 		}
@@ -232,11 +241,31 @@ func createAllianceCommand(session *discordgo.Session, message *discordgo.Messag
 		session.ChannelMessageSend(channel.ID,
 			T("alliance_already_exists",
 				TInter{"Alliance": alliance.Name, "Owner": owner.Username}))
+
+		return
 	}
 
-	newAlliance := createAlliance(name, guild, message.Author)
+	newAlliance := createAlliance(allianceName, guild, message.Author)
 
-	globalState.Alliances[name] = newAlliance
+	globalState.Alliances[allianceName] = newAlliance
+	globalState.GuildTable = makeGuildTable(globalState.Alliances)
+	session.ChannelMessageSend(channel.ID, T("created_alliance"))
+}
+
+func deleteAllianceCommand(session *discordgo.Session, message *discordgo.MessageCreate, alliance *Alliance) {
+
+	channel, args, err := getChannelAndArgsFromMessage(session, message)
+	if err != nil || args == nil || len(args) < 2 {
+		session.ChannelMessageSend(channel.ID, T("deletealliance_usage"))
+		return
+	}
+	allianceName := args[1]
+
+	delete(globalState.Alliances, allianceName)
+
+	globalState.GuildTable = makeGuildTable(globalState.Alliances)
+
+	session.ChannelMessageSend(channel.ID, T("createalliance_usage"))
 }
 
 func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
@@ -532,6 +561,8 @@ func helpCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *All
 		message = T("need_help")
 	case "alliances":
 		message = T("alliances_help")
+	default:
+		message = T("usage")
 
 	}
 

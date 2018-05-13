@@ -4,7 +4,6 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -18,6 +17,17 @@ func makeAliasTable(aliases Aliases) (aliasTable map[string][]string) {
 	}
 
 	return aliasTable
+}
+
+func makeGuildTable(alliances map[string]*Alliance) (guildTable map[string][]string) {
+	guildTable = make(map[string][]string)
+	for name, alliance := range alliances {
+		for _, guildID := range alliance.Guilds {
+			guildTable[guildID] = append(guildTable[guildID], name)
+		}
+	}
+
+	return guildTable
 }
 
 func isGabCreator(user *discordgo.User) bool {
@@ -38,14 +48,56 @@ func checkPermissionsForCommand(s *State, c *Command, u *discordgo.User) bool {
 	return false
 }
 
-func getAllianceFromMessage(session *discordgo.Session, message *discordgo.MessageCreate) (alliance *Alliance, err error) {
+func getAllianceFromMessage(session *discordgo.Session, message *discordgo.MessageCreate) (*Alliance, error) {
+	guild, err := getGuildFromMessage(session, message)
+	if err != nil {
+		return nil, err
+	}
+	if alliances, exists := globalState.GuildTable[guild.ID]; exists {
 
-	channel, err := session.State.Channel(message.ChannelID)
-	guild, err := session.State.Guild(channel.GuildID)
-	_ = guild
-
-	return nil, errors.New("damn son, no alliance wants you")
+		switch len(alliances) {
+		case 0:
+			return nil, errors.New("damn son, not even a single alliance wants you")
+		case 1:
+			return globalState.Alliances[alliances[0]], err
+		default:
+			return nil, errors.New("multiple alliances not yet supported") // TODO multiple alliances
+		}
+	}
+	return nil, errors.New("damn son, not even a single alliance wants you")
 }
+
+func getChannelAndArgsFromMessage(session *discordgo.Session, message *discordgo.MessageCreate) (channel *discordgo.Channel, args []string, err error) {
+	// Parse arguments from where the message came from.
+	args, err = parseArguments(message.Content)
+	if err != nil {
+		args = nil
+	}
+
+	// Find the channel that the message came from.
+	channel, err = session.State.Channel(message.ChannelID)
+	if err != nil {
+		return nil, args, err
+	}
+
+	return channel, args, nil
+}
+
+func getGuildFromMessage(session *discordgo.Session, message *discordgo.MessageCreate) (guild *discordgo.Guild, err error) {
+	// Find the channel that the message came from.
+	channel, err := session.State.Channel(message.ChannelID)
+	if err != nil {
+		return nil, err
+	}
+
+	guild, err = session.State.Guild(channel.GuildID)
+	if err != nil {
+		return nil, err
+	}
+
+	return guild,nil
+}
+
 
 func createAlliance(name string, guild *discordgo.Guild, admin *discordgo.User) (alliance *Alliance) {
 
@@ -58,9 +110,9 @@ func createAlliance(name string, guild *discordgo.Guild, admin *discordgo.User) 
 	defaultState.AliasTable = makeAliasTable(defaultState.Aliases)
 
 	alliance = &Alliance{
-		Name:  name,
-		State: defaultState,
-		Admin: admin.ID,
+		Name:   name,
+		State:  defaultState,
+		Admin:  admin.ID,
 		Guilds: append([]string{}, guild.ID),
 	}
 
@@ -248,10 +300,11 @@ func getWinnerFromParticipants(participants Participants) (winner *Participant, 
 }
 
 func persistGlobalData(state GlobalState) (err error) {
-	reader, err := os.OpenFile(globalState.DataDirectory + "/" + globalState.GlobalStateFile, os.O_WRONLY, 0600)
+	reader, err := os.OpenFile(globalState.DataDirectory+"/"+globalState.GlobalStateFile, os.O_WRONLY, 0600)
+	defer reader.Close()
 	if err != nil {
-		log.Fatal("data file write opening error", err)
-		os.Exit(1)
+		fmt.Println("data file write opening error:", err)
+		return err
 	}
 	err = gob.NewEncoder(reader).Encode(state)
 	if err != nil {
