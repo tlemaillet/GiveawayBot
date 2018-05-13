@@ -95,9 +95,25 @@ func getGuildFromMessage(session *discordgo.Session, message *discordgo.MessageC
 		return nil, err
 	}
 
-	return guild,nil
+	return guild, nil
 }
 
+
+func getCommandFromName(name string) (command *Command, err error) {
+	if command, exists := globalState.CommandList[name]; exists {
+		return command, nil
+	} else {
+		return nil, errors.New("no such command: " + name)
+	}
+}
+
+func getAliasFromName(name string) (alias *Alias, err error) {
+	if alias, exists := globalState.AliasList[name]; exists {
+		return alias, nil
+	} else {
+		return nil, errors.New("no such command: " + name)
+	}
+}
 
 func createAlliance(name string, guild *discordgo.Guild, admin *discordgo.User) (alliance *Alliance) {
 
@@ -107,7 +123,7 @@ func createAlliance(name string, guild *discordgo.Guild, admin *discordgo.User) 
 		NeedLimit: defaultNeedLimit,
 	}
 	defaultState.Commands, defaultState.Aliases = getDefaultGabCommandsAndAliases()
-	defaultState.AliasTable = makeAliasTable(defaultState.Aliases)
+	defaultState.AliasTable = makeAliasTable(globalState.AliasList)
 
 	alliance = &Alliance{
 		Name:   name,

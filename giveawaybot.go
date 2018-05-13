@@ -188,9 +188,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	var command *Command = nil
 	if validAlias, ok := state.Aliases[commandName]; ok {
-		command = validAlias.Command
+		alias, _ := getAliasFromName(validAlias)
+		command = alias.Command
 	} else if validCommand, ok := state.Commands[commandName]; ok {
-		command = validCommand
+		command, err = getCommandFromName(validCommand)
 	}
 
 	if command != nil {

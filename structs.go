@@ -37,8 +37,8 @@ type Participants map[string]*Participant
 type State struct {
 	GabPrefix string
 
-	Commands   map[string]*Command
-	Aliases    map[string]*Alias
+	Commands   map[string]string
+	Aliases    map[string]string
 	AliasTable map[string][]string
 
 	Game    string

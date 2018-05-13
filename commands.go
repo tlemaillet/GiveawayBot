@@ -142,19 +142,25 @@ func initCommandList() {
 	globalState.AliasList = aliases
 }
 
-func getDefaultGabCommandsAndAliases() (commands Commands, aliases Aliases) {
-	commands = globalState.CommandList
-	aliases = globalState.AliasList
+func getDefaultGabCommandsAndAliases() (commands map[string]string, aliases map[string]string) {
+	commands = make(map[string]string)
+	for commandKey, command := range globalState.CommandList {
+		commands[commandKey] = command.Name
+	}
+	aliases = make(map[string]string)
+	for aliasKey, alias := range globalState.AliasList {
+		aliases[aliasKey] = alias.Name
+	}
 
 	return commands, aliases
 }
 
-func getfallbackCommandsAndAliases() (commands Commands, aliases Aliases) {
-	commands = make(Commands)
-	aliases = make(Aliases)
-	commands["help"] = globalState.CommandList["inithelp"]
-	commands["alliancecreate"] = globalState.CommandList["alliancecreate"]
-	aliases["ac"] = globalState.AliasList["ac"]
+func getfallbackCommandsAndAliases() (commands map[string]string, aliases map[string]string) {
+	commands = make(map[string]string)
+	aliases = make(map[string]string)
+	commands["help"] = "inithelp"
+	commands["alliancecreate"] = "alliancecreate"
+	aliases["ac"] = "ac"
 
 	return commands, aliases
 }
@@ -169,7 +175,8 @@ func listCommandsCommand(s *discordgo.Session, m *discordgo.MessageCreate, allia
 
 	var message = T("command_list") + "\n"
 
-	for _, command := range alliance.State.Commands {
+	for _, commandName := range alliance.State.Commands {
+		command := globalState.CommandList[commandName]
 		if command.Hidden {
 			continue
 		}
@@ -226,7 +233,7 @@ func createAllianceCommand(session *discordgo.Session, message *discordgo.Messag
 		// Could not find channel.
 		return
 	}
-	if len(args) != 2 && args[1] != "" {
+	if len(args) != 2 || args[1] == "" {
 		session.ChannelMessageSend(channel.ID, T("createalliance_usage"))
 		return
 	}
@@ -265,7 +272,9 @@ func deleteAllianceCommand(session *discordgo.Session, message *discordgo.Messag
 
 	globalState.GuildTable = makeGuildTable(globalState.Alliances)
 
-	session.ChannelMessageSend(channel.ID, T("createalliance_usage"))
+	session.ChannelMessageSend(channel.ID,
+		T("deleted_alliance",
+			TInter{"Alliance": allianceName}))
 }
 
 func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {
@@ -563,7 +572,6 @@ func helpCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *All
 		message = T("alliances_help")
 	default:
 		message = T("usage")
-
 	}
 
 	// Find the channel that the message came from.
