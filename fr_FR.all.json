@@ -5,7 +5,7 @@
   },
   {
     "id": "usage",
-    "translation": "Usage:\nLorsque qu'un giveaway est lancé, ecrivez \"!gabroll\" pour participer et connaitre le résultat de votre dé. Un seul lancer par personne!\nÀ la fin du giveaway, le gagnant sera annoncé et sa clé lui sera envoyée par message privé"
+    "translation": "Usage:\nLorsque qu'un giveaway est lancé, ecrivez `!gabroll` pour participer et connaitre le résultat de votre dé. Un seul lancer par personne!\nVous pouvez aussi écrire `!gabroll need` pour prendre la priorité sur les autres lancers, mais attention vous ne pouvez l'utiliser que deux fois par mois!\nÀ la fin du giveaway, le gagnant sera annoncé et sa clé lui sera envoyée par message privé."
   },
   {
     "id": "start_usage",
@@ -37,11 +37,15 @@
   },
   {
     "id": "start_announcement",
-    "translation": "Le giveaway commence! Le jeu à gagner est {{.Game}}"
+    "translation": "@here Le giveaway commence! Le jeu à gagner est {{.Game}}"
   },
   {
     "id": "roll_result",
     "translation": "{{.Person}} a obtenu un {{.Count}}!"
+  },
+  {
+    "id": "roll_result_need",
+    "translation": "{{.Person}} a obtenu un {{.Count}} et il need!"
   },
   {
     "id": "already_rolled",

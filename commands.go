@@ -69,6 +69,10 @@ func initCommandList() {
 		Description: T("listcommands_command_desc"),
 		Callback:    listCommandsCommand,
 	}
+	aliases["lc"] = &Alias{
+		Name:    "lc",
+		Command: commands["listcommands"],
+	}
 	commands["talk"] = &Command{
 		Name:        "talk",
 		Options:     "message",
@@ -126,6 +130,18 @@ func initCommandList() {
 		Name:    "ac",
 		Command: commands["alliancecreate"],
 	}
+	commands["addguildtoalliance"] = &Command{
+		Name:            "addguildtoalliance",
+		Options:         "<alliance name> ",
+		Description:     T("addguildtoalliance_command_desc"),
+		NeedsGuildAdmin: true,
+		NeedsGuild:      true,
+		Callback:        addGuildToAllianceCommand,
+	}
+	aliases["ag"] = &Alias{
+		Name:    "ag",
+		Command: commands["addguildtoalliance"],
+	}
 	commands["alliancedelete"] = &Command{
 		Name:               "alliancedelete",
 		Options:            "<alliance name> ",
@@ -161,6 +177,9 @@ func getfallbackCommandsAndAliases() (commands map[string]string, aliases map[st
 	commands["help"] = "inithelp"
 	commands["alliancecreate"] = "alliancecreate"
 	aliases["ac"] = "ac"
+	commands["addguildtoalliance"] = "addguildtoalliance"
+	aliases["ag"] = "ag"
+
 
 	return commands, aliases
 }
@@ -242,7 +261,8 @@ func createAllianceCommand(session *discordgo.Session, message *discordgo.Messag
 	if alliance, exists := globalState.Alliances[allianceName]; exists {
 		owner, err := session.User(alliance.Admin)
 		if err != nil {
-			owner.Username = "NotFound"
+			session.ChannelMessageSend(channel.ID, T("error_creating_alliance"))
+			return
 		}
 
 		session.ChannelMessageSend(channel.ID,
@@ -252,11 +272,36 @@ func createAllianceCommand(session *discordgo.Session, message *discordgo.Messag
 		return
 	}
 
-	newAlliance := createAlliance(allianceName, guild, message.Author)
+	newAlliance, err := createAlliance(allianceName, guild, message.Author)
+	if err != nil {
+		session.ChannelMessageSend(channel.ID, T("error_creating_alliance"))
+		return
+	}
 
 	globalState.Alliances[allianceName] = newAlliance
 	globalState.GuildTable = makeGuildTable(globalState.Alliances)
 	session.ChannelMessageSend(channel.ID, T("created_alliance"))
+}
+
+func addGuildToAllianceCommand (session *discordgo.Session, message *discordgo.MessageCreate, alliance *Alliance) {
+	channel, args, err := getChannelAndArgsFromMessage(session, message)
+	if err != nil || args == nil || len(args) < 2 {
+		session.ChannelMessageSend(channel.ID, T("addguildtoalliance_usage"))
+		return
+	}
+
+	allianceName := args[1]
+	if alliance, exists := globalState.Alliances[allianceName]; exists {
+		guild , err := session.Guild(channel.GuildID)
+		if err != nil {
+			session.ChannelMessageSend(channel.ID, T("error_adding_guild"))
+			return
+		}
+
+		globalState.Alliances[alliance.Name].Guilds = append(globalState.Alliances[alliance.Name].Guilds, guild.ID)
+		globalState.GuildTable = makeGuildTable(globalState.Alliances)
+		session.ChannelMessageSend(channel.ID, T("added_guild"))
+	}
 }
 
 func deleteAllianceCommand(session *discordgo.Session, message *discordgo.MessageCreate, alliance *Alliance) {
@@ -305,11 +350,12 @@ func startGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, alli
 	if len(startArgs) != 2 {
 		s.ChannelMessageSend(c.ID, T("start_usage"))
 	} else {
+
 		alliance.State.Game = startArgs[0]
 		alliance.State.GameKey = startArgs[1]
-		alliance.State.Participants = map[string]*Participant{}
+		alliance.State.Participants = map[string]Participant{}
 		alliance.State.Rolling = true
-		sendToAllGuilds(s,
+		sendToAllianceGuilds(s, alliance,
 			T("start_announcement",
 				TInter{"Game": alliance.State.Game}))
 	}
@@ -331,20 +377,25 @@ func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, allia
 	alliance.State.Rolling = false
 	if len(alliance.State.Participants) != 0 {
 		winnerParticipant, _ := getWinnerFromParticipants(alliance.State.Participants)
-		winner := winnerParticipant.User
+		winner, err := s.User(winnerParticipant.UserID)
+		if err != nil {
+			sendToAllianceGuilds(s, alliance, T("winner_doesnt_exists"))
+			return
+		}
 
-		sendToAllGuilds(s, T("winner_announcement_start"))
+
+		sendToAllianceGuilds(s, alliance, T("winner_announcement_start"))
 		time.Sleep(time.Second * 4)
 		if rndm.Intn(30) != 0 {
 
-			sendToAllGuilds(s, T("winner_announcement",
+			sendToAllianceGuilds(s, alliance, T("winner_announcement",
 				TInter{"Person": winner.Username}))
 
 		} else {
-			sendToAllGuilds(s,
+			sendToAllianceGuilds(s, alliance,
 				T("winner_announcement_cena"))
 			time.Sleep(time.Second * 20)
-			sendToAllGuilds(s,
+			sendToAllianceGuilds(s, alliance,
 				T("winner_announcement_final",
 					TInter{"Person": winner.Username}))
 		}
@@ -357,7 +408,7 @@ func stopGiveawayCommand(s *discordgo.Session, m *discordgo.MessageCreate, allia
 					"Key": alliance.State.GameKey}))
 
 	} else {
-		sendToAllGuilds(s, T("no_players"))
+		sendToAllianceGuilds(s, alliance, T("no_players"))
 	}
 }
 
@@ -375,7 +426,7 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *All
 	}
 
 	if isGabCreator(m.Author) {
-		sendToAllGuilds(s,
+		sendToAllianceGuilds(s, alliance,
 			T("roll_result",
 				TInter{"Person": m.Author.Username, "Count": "∞"}))
 		return
@@ -406,12 +457,12 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *All
 
 			s.ChannelMessageSend(c.ID,
 				T("already_rolled_need",
-					TInter{"Person": participant.User.Username,
+					TInter{"Person": m.Author.Username,
 						"Count": participant.Score}))
 		} else {
 			s.ChannelMessageSend(c.ID,
 				T("already_rolled",
-					TInter{"Person": participant.User.Username,
+					TInter{"Person": m.Author.Username,
 						"Count": participant.Score}))
 
 		}
@@ -429,20 +480,24 @@ func rollCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *All
 			}
 		}
 
-		alliance.State.Participants[m.Author.ID] = &Participant{
-			User:  m.Author,
+		alliance.State.Participants[m.Author.ID] = Participant{
+			UserID:  m.Author.ID,
 			Score: roll,
 			Need:  need,
+		}
+		var tRollResult = "roll_result"
+		if need {
+			tRollResult = "roll_result_need"
 		}
 
 		switch commandName {
 		case "roll", "r":
-			sendToAllGuilds(s,
-				T("roll_result",
+			sendToAllianceGuilds(s, alliance,
+				T(tRollResult,
 					TInter{"Person": m.Author.Username, "Count": roll}))
 		case "localroll", "lr":
 			s.ChannelMessageSend(c.ID,
-				T("roll_result",
+				T(tRollResult,
 					TInter{"Person": m.Author.Username, "Count": roll}))
 		}
 	}
@@ -556,7 +611,7 @@ func talkCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *All
 		TInter{"Author": m.Author.Username,
 			"Server": gName,
 			"Message": message})
-	sendToAllGuilds(s, say)
+	sendToAllianceGuilds(s, alliance, say)
 }
 
 func helpCommand(s *discordgo.Session, m *discordgo.MessageCreate, alliance *Alliance) {

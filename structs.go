@@ -28,11 +28,11 @@ type Alias struct {
 type Aliases map[string]*Alias
 
 type Participant struct {
-	User  *discordgo.User
+	UserID  string
 	Score int
 	Need  bool
 }
-type Participants map[string]*Participant
+type Participants map[string]Participant
 
 type State struct {
 	GabPrefix string
@@ -45,16 +45,21 @@ type State struct {
 	GameKey string
 
 	Rolling      bool
-	Participants map[string]*Participant
+	Participants map[string]Participant
 	NeedLimit    int
+	NeedState  NeedState
 }
 type Alliance struct {
 	Name       string
 	Admin      string
 	State      *State
-	NeedState  NeedState
 	Moderators []string
+	MainGuild  string
 	Guilds     []string
+}
+
+type PersitentGlobalState struct  {
+	Alliances       map[string]*Alliance
 }
 
 type GlobalState struct {

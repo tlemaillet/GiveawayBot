@@ -26,7 +26,6 @@ func makeGuildTable(alliances map[string]*Alliance) (guildTable map[string][]str
 			guildTable[guildID] = append(guildTable[guildID], name)
 		}
 	}
-
 	return guildTable
 }
 
@@ -53,6 +52,7 @@ func getAllianceFromMessage(session *discordgo.Session, message *discordgo.Messa
 	if err != nil {
 		return nil, err
 	}
+
 	if alliances, exists := globalState.GuildTable[guild.ID]; exists {
 
 		switch len(alliances) {
@@ -115,8 +115,14 @@ func getAliasFromName(name string) (alias *Alias, err error) {
 	}
 }
 
-func createAlliance(name string, guild *discordgo.Guild, admin *discordgo.User) (alliance *Alliance) {
+func createAlliance(name string, guild *discordgo.Guild, admin *discordgo.User) (alliance *Alliance, err error) {
 
+	for _, a := range globalState.Alliances {
+		if a.MainGuild == guild.ID {
+			err = errors.New("this guild already has an alliance")
+			return nil, err
+		}
+	}
 	defaultState := &State{
 		GabPrefix: defaultPrefix,
 		Rolling:   false,
@@ -129,12 +135,13 @@ func createAlliance(name string, guild *discordgo.Guild, admin *discordgo.User) 
 		Name:   name,
 		State:  defaultState,
 		Admin:  admin.ID,
+		MainGuild: guild.ID,
 		Guilds: append([]string{}, guild.ID),
 	}
 
-	alliance.NeedState = make(NeedState)
+	alliance.State.NeedState = make(map[string][]NeedEntry)
 
-	return alliance
+	return alliance, nil
 }
 
 func hasRolePermissions(session *discordgo.Session, channel *discordgo.Channel) (bool, error) {
@@ -222,25 +229,48 @@ func getGuildsMainChannel(s *discordgo.Session) []*discordgo.Channel {
 	return mainChannels
 }
 
-func getGuildsGiveawayChannel(s *discordgo.Session) []*discordgo.Channel {
-	var mainChannels []*discordgo.Channel
+func getGuildGiveawayChannel(g *discordgo.Guild) (giveawayChannels []*discordgo.Channel) {
+	for _, channel := range g.Channels {
+		if channel.Type == 0 && channel.Name == "giveaway" {
+			// fmt.Printf("\t- %s\n", channel.Name)
+			giveawayChannels = append(giveawayChannels, channel)
+		}
+	}
+
+	return giveawayChannels
+}
+
+func getGuildsGiveawayChannel(s *discordgo.Session) (giveawayChannels []*discordgo.Channel) {
 	for _, guild := range s.State.Guilds {
 		// fmt.Println(guild.Name)
 
 		for _, channel := range guild.Channels {
 			if channel.Type == 0 && channel.Name == "giveaway" {
 				// fmt.Printf("\t- %s\n", channel.Name)
-				mainChannels = append(mainChannels, channel)
+				giveawayChannels = append(giveawayChannels, channel)
 			}
 		}
 	}
 
-	return mainChannels
+	return giveawayChannels
 }
 
 func sendToAllGuilds(s *discordgo.Session, message string) {
 	channels := getGuildsGiveawayChannel(s)
 	sendToChannels(s, channels, message)
+}
+
+func sendToAllianceGuilds(s *discordgo.Session, alliance *Alliance, message string) {
+	for _, guildID := range alliance.Guilds {
+		alGuild, err := s.Guild(guildID)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		channels := getGuildGiveawayChannel(alGuild)
+
+		sendToChannels(s, channels, message)
+	}
 }
 
 func sendToAllGuildsMainChannel(s *discordgo.Session, message string) {
@@ -258,7 +288,7 @@ func sendToChannels(s *discordgo.Session, channels []*discordgo.Channel, message
 }
 
 func hasReachedNeedLimit(user *discordgo.User, alliance *Alliance) bool {
-	if needEntries, exist := alliance.NeedState[user.ID]; exist {
+	if needEntries, exist := alliance.State.NeedState[user.ID]; exist {
 		if len(needEntries) < alliance.State.NeedLimit {
 			return false
 		} else {
@@ -279,18 +309,18 @@ func hasReachedNeedLimit(user *discordgo.User, alliance *Alliance) bool {
 }
 
 func addNeedTry(user *discordgo.User, state *State) (err error) {
-	needState[user.ID] = append(needState[user.ID],
+	state.NeedState[user.ID] = append(state.NeedState[user.ID],
 		NeedEntry{Game: state.Game, Date: time.Now()})
 
 	err = persistGlobalData(globalState)
 	if err != nil {
-		needState[user.ID] = needState[user.ID][:len(needState[user.ID])-1]
+		state.NeedState[user.ID] = state.NeedState[user.ID][:len(state.NeedState[user.ID])-1]
 		return err
 	}
 	return nil
 }
 
-func getWinnerFromParticipants(participants Participants) (winner *Participant, err error) {
+func getWinnerFromParticipants(participants Participants) (winner Participant, err error) {
 	needed := false
 	bestScore := -1
 
@@ -322,7 +352,10 @@ func persistGlobalData(state GlobalState) (err error) {
 		fmt.Println("data file write opening error:", err)
 		return err
 	}
-	err = gob.NewEncoder(reader).Encode(state)
+	err = gob.NewEncoder(reader).Encode(
+		PersitentGlobalState{
+			state.Alliances,
+		})
 	if err != nil {
 		return err
 	}

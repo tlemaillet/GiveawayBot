@@ -26,8 +26,6 @@ const defaultPrefix = "!gab"
 const defaultNeedLimit = 2
 
 var globalState GlobalState
-var needState NeedState
-var needDataFile string
 
 var token string
 
@@ -39,7 +37,6 @@ func init() {
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.StringVar(&translationFile, "T", "en_US.all.json", "Translation")
 	flag.StringVar(&dataDirectory, "D", "./gabData", "dataDirectory")
-	flag.StringVar(&needDataFile, "d", "./needData.gob", "Need data file")
 	flag.StringVar(&globalStateFile, "g", "globalState.gob", "Global State file")
 	flag.Parse()
 
@@ -69,10 +66,16 @@ func init() {
 
 		dec := gob.NewDecoder(gsReader)
 
-		err = dec.Decode(&globalState)
+		var pState PersitentGlobalState
+		err = dec.Decode(&pState)
 		if err != nil {
 			fmt.Println("decode error:", err)
 			initGlobalState(dataDirectory, globalStateFile)
+		} else {
+			fmt.Println(pState)
+			fmt.Println(pState.Alliances["Toto"].State.Participants)
+			fmt.Println(pState.Alliances["Toto"].State.NeedState)
+			reinitGlobalState(pState, dataDirectory, globalStateFile)
 		}
 	}
 	gsReader.Close()
@@ -86,6 +89,18 @@ func initGlobalState(dataDirectory string, globalStateFile string){
 		GlobalStateFile: globalStateFile,
 		BotToken:        token,
 	}
+	initCommandList()
+}
+
+func reinitGlobalState(state PersitentGlobalState, dataDirectory string, globalStateFile string){
+	globalState = GlobalState{
+		Alliances:       state.Alliances,
+		GuildTable:      makeGuildTable(state.Alliances),
+		DataDirectory:   dataDirectory,
+		GlobalStateFile: globalStateFile,
+		BotToken:        token,
+	}
+
 	initCommandList()
 }
 
@@ -209,6 +224,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		if command.Callback == nil {
 			s.ChannelMessageSend(c.ID, T("wtf"))
+			s.ChannelMessageSend(c.ID, command.Name + "/n")
 			return
 		}
 
