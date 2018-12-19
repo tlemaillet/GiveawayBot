@@ -41,11 +41,11 @@
   },
   {
     "id": "roll_result",
-    "translation": "{{.Person}} a obtenu un {{.Count}}!"
+    "translation": "{{.Person}} obtient un {{.Count}}!"
   },
   {
     "id": "roll_result_need",
-    "translation": "{{.Person}} a obtenu un {{.Count}} et il need!"
+    "translation": "{{.Person}} utilise un need et obtient un {{.Count}}!"
   },
   {
     "id": "already_rolled",
